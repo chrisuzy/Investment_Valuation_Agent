@@ -1,0 +1,107 @@
+{
+  "source": "knowledge_base/Ginzu_NVIDIA.xlsx",
+  "sheets": ["Synthetic rating", "Cost of capital worksheet", "Country equity risk premiums"],
+
+  "synthetic_rating_tables": {
+    "description": "Coverage ratio → rating → spread. Each entry: {coverage_lower, coverage_upper, rating, spread}. Select firm_type based on size/type.",
+
+    "large": [
+      {"coverage_lower": -100000, "coverage_upper": 0.2,       "rating": "D2/D",    "spread": 0.2},
+      {"coverage_lower": 0.2,      "coverage_upper": 0.65,      "rating": "C2/C",    "spread": 0.175},
+      {"coverage_lower": 0.65,     "coverage_upper": 0.8,       "rating": "Ca2/CC",  "spread": 0.1578},
+      {"coverage_lower": 0.8,      "coverage_upper": 1.25,      "rating": "Caa/CCC", "spread": 0.1157},
+      {"coverage_lower": 1.25,     "coverage_upper": 1.5,       "rating": "B3/B-",   "spread": 0.0737},
+      {"coverage_lower": 1.5,      "coverage_upper": 1.75,      "rating": "B2/B",    "spread": 0.0526},
+      {"coverage_lower": 1.75,     "coverage_upper": 2.0,       "rating": "B1/B+",   "spread": 0.0455},
+      {"coverage_lower": 2.0,      "coverage_upper": 2.25,      "rating": "Ba2/BB",  "spread": 0.0313},
+      {"coverage_lower": 2.25,     "coverage_upper": 2.5,       "rating": "Ba1/BB+", "spread": 0.0242},
+      {"coverage_lower": 2.5,      "coverage_upper": 3.0,       "rating": "Baa2/BBB","spread": 0.02},
+      {"coverage_lower": 3.0,      "coverage_upper": 4.25,      "rating": "A3/A-",   "spread": 0.0162},
+      {"coverage_lower": 4.25,     "coverage_upper": 5.5,       "rating": "A2/A",    "spread": 0.0142},
+      {"coverage_lower": 5.5,      "coverage_upper": 6.5,       "rating": "A1/A+",   "spread": 0.0123},
+      {"coverage_lower": 6.5,      "coverage_upper": 8.5,       "rating": "Aa2/AA",  "spread": 0.0085},
+      {"coverage_lower": 8.5,      "coverage_upper": 100000,    "rating": "Aaa/AAA", "spread": 0.0069}
+    ],
+
+    "small": [
+      {"coverage_lower": -100000, "coverage_upper": 0.5,       "rating": "D2/D",    "spread": 0.2},
+      {"coverage_lower": 0.5,      "coverage_upper": 0.8,       "rating": "C2/C",    "spread": 0.175},
+      {"coverage_lower": 0.8,      "coverage_upper": 1.25,      "rating": "Ca2/CC",  "spread": 0.1578},
+      {"coverage_lower": 1.25,     "coverage_upper": 1.5,       "rating": "Caa/CCC", "spread": 0.1157},
+      {"coverage_lower": 1.5,      "coverage_upper": 2.0,       "rating": "B3/B-",   "spread": 0.0737},
+      {"coverage_lower": 2.0,      "coverage_upper": 2.5,       "rating": "B2/B",    "spread": 0.0526},
+      {"coverage_lower": 2.5,      "coverage_upper": 3.0,       "rating": "B1/B+",   "spread": 0.0455},
+      {"coverage_lower": 3.0,      "coverage_upper": 3.5,       "rating": "Ba2/BB",  "spread": 0.0313},
+      {"coverage_lower": 3.5,      "coverage_upper": 4.0,       "rating": "Ba1/BB+", "spread": 0.0242},
+      {"coverage_lower": 4.0,      "coverage_upper": 4.5,       "rating": "Baa2/BBB","spread": 0.02},
+      {"coverage_lower": 4.5,      "coverage_upper": 6.0,       "rating": "A3/A-",   "spread": 0.0162},
+      {"coverage_lower": 6.0,      "coverage_upper": 7.5,       "rating": "A2/A",    "spread": 0.0142},
+      {"coverage_lower": 7.5,      "coverage_upper": 9.5,       "rating": "A1/A+",   "spread": 0.0123},
+      {"coverage_lower": 9.5,      "coverage_upper": 12.5,      "rating": "Aa2/AA",  "spread": 0.0085},
+      {"coverage_lower": 12.5,     "coverage_upper": 100000,    "rating": "Aaa/AAA", "spread": 0.0069}
+    ],
+
+    "financial": "NOT_POPULATED_IN_SOURCE — falls back to 'large' coverage thresholds per Ginzu's default. Analyst should cross-check for rated financial firms."
+  },
+
+  "rating_to_spread": {
+    "Aaa/AAA": 0.0069,
+    "Aa2/AA":  0.0085,
+    "A1/A+":   0.0123,
+    "A2/A":    0.0142,
+    "A3/A-":   0.0162,
+    "Baa2/BBB":0.02,
+    "Ba1/BB+": 0.0242,
+    "Ba2/BB":  0.0313,
+    "B1/B+":   0.0455,
+    "B2/B":    0.0526,
+    "B3/B-":   0.0737,
+    "Caa/CCC": 0.1157,
+    "Ca2/CC":  0.1578,
+    "C2/C":    0.175,
+    "D2/D":    0.2
+  },
+
+  "decile_table": {
+    "description": "Approach 3 — regional cost-of-capital lookup. Rows = region, columns = risk quartile. Values are WACC (US-dollar) at Ginzu publication date.",
+    "Emerging":  {"First Decile": 0.0741, "First Quartile": 0.0844, "Median": 0.0961, "Third Quartile": 0.1099, "Ninth Decile": 0.1281},
+    "Europe":    {"First Decile": 0.0678, "First Quartile": 0.0765, "Median": 0.0897, "Third Quartile": 0.1011, "Ninth Decile": 0.1152},
+    "Global":    {"First Decile": 0.0689, "First Quartile": 0.0803, "Median": 0.0906, "Third Quartile": 0.1031, "Ninth Decile": 0.1175},
+    "Japan":     {"First Decile": 0.0686, "First Quartile": 0.0783, "Median": 0.0891, "Third Quartile": 0.0977, "Ninth Decile": 0.1091},
+    "US":        {"First Decile": 0.0578, "First Quartile": 0.0687, "Median": 0.0835, "Third Quartile": 0.0931, "Ninth Decile": 0.1005}
+  },
+  "decile_base_riskfree": 0.0388,
+
+  "regional_erp": {
+    "description": "Row-per-region aggregates from Country equity risk premiums rows 201-210. Total ERP = mature_market_erp base + region_crp.",
+    "Africa":                    {"total_erp": 0.10494, "crp": 0.06164},
+    "Asia":                      {"total_erp": 0.05401, "crp": 0.01071},
+    "Australia & New Zealand":   {"total_erp": 0.04333, "crp": 0.00003},
+    "Caribbean":                 {"total_erp": 0.10342, "crp": 0.06012},
+    "Central and South America": {"total_erp": 0.07907, "crp": 0.03577},
+    "Eastern Europe":            {"total_erp": 0.06851, "crp": 0.02521},
+    "Middle East":               {"total_erp": 0.05887, "crp": 0.01557},
+    "North America":             {"total_erp": 0.0433,  "crp": 0.0},
+    "Western Europe":            {"total_erp": 0.05157, "crp": 0.00827},
+    "Global":                    {"total_erp": 0.05368, "crp": 0.01038}
+  },
+
+  "industry_amortization_default_n": {
+    "description": "Damodaran industry-specific R&D amortization defaults (years).",
+    "default": 5,
+    "by_industry": {
+      "Drugs (Pharmaceutical)": 10,
+      "Drugs (Biotechnology)": 10,
+      "Aerospace/Defense": 10,
+      "Healthcare Products": 10,
+      "Chemical (Basic)": 10,
+      "Chemical (Diversified)": 10,
+      "Chemical (Specialty)": 10,
+      "Oil/Gas (Integrated)": 10,
+      "Oil/Gas (Production and Exploration)": 10,
+      "Retail (Online)": 3,
+      "Software (Internet)": 3,
+      "Software (Entertainment)": 3
+    }
+  }
+}

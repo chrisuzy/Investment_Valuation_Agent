@@ -1,0 +1,42 @@
+[
+  {
+    "company_name": "Alibaba Group Holding Limited",
+    "exchange_ticker": "NYSE:BABA",
+    "industry_group": "Retail (Online)",
+    "primary_sector": "Consumer Discretionary",
+    "sic_code": "5961",
+    "country": "China",
+    "broad_group": "Emerging Markets",
+    "sub_group": "China"
+  },
+  {
+    "company_name": "Alibaba Group Holding Limited",
+    "exchange_ticker": "HKSE:9988",
+    "industry_group": "Retail (Online)",
+    "primary_sector": "Consumer Discretionary",
+    "sic_code": "5961",
+    "country": "China",
+    "broad_group": "Emerging Markets",
+    "sub_group": "China"
+  },
+  {
+    "company_name": "PDD Holdings Inc.",
+    "exchange_ticker": "NasdaqGS:PDD",
+    "industry_group": "Retail (Online)",
+    "primary_sector": "Consumer Discretionary",
+    "sic_code": "5961",
+    "country": "China",
+    "broad_group": "Emerging Markets",
+    "sub_group": "China"
+  },
+  {
+    "company_name": "Sea Limited",
+    "exchange_ticker": "NYSE:SE",
+    "industry_group": "Retail (Online)",
+    "primary_sector": "Consumer Discretionary",
+    "sic_code": "5961",
+    "country": "Singapore",
+    "broad_group": "Developed Markets",
+    "sub_group": "Singapore"
+  }
+]

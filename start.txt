@@ -1,0 +1,2 @@
+chmod +x start_claude.sh  # 仅第一次需要，赋予执行权限
+./start_claude.sh
