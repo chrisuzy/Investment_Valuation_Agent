@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Vite
+node_modules/
+dist/
+.vite/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts / caches
+*.tsbuildinfo
+coverage/
+.nyc_output/
+
+# CIQ scratch / resolved files (keep templates in repo separately if needed)
+knowledge_base/ciq_fetches/_temp_*.xlsx
+
+# Local scratch
+/tmp_*
+*.local
+.env
+.env.local
