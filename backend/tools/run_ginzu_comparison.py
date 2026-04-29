@@ -41,38 +41,26 @@ SMALL_PCT = 0.05   # ⚠  — within 5%
                    # ❌  — ≥ 5%
 
 
-def _read_ginzu_values_from_package(md_path: Path) -> dict[tuple[str, str], float | None]:
-    """Parse Section D from the user-filled package file; return {(sheet, cell): value_or_None}."""
-    text = md_path.read_text()
-    # Section D starts after '## D.'
-    section_d_match = re.search(r"## D\..*", text, flags=re.DOTALL)
-    if not section_d_match:
-        return {}
-    section_d = section_d_match.group(0)
+def _read_ginzu_values_from_excel(xlsx_path: Path) -> dict[tuple[str, str], float | None]:
+    """Read Ginzu's computed output values directly from the recalculated workbook.
+
+    Expects `<TICKER>_ginzu_output.xlsx` — the pre-filled workbook after the user
+    opened it in Excel, let it recalc, and saved. `data_only=True` reads the
+    cached result values (not the formulas).
+
+    Returns {(sheet, cell): value} for every (sheet, cell) in OUTPUT_CELLS_SPEC.
+    """
+    import openpyxl
+    wb = openpyxl.load_workbook(str(xlsx_path), data_only=True)
     out: dict[tuple[str, str], float | None] = {}
-    for line in section_d.splitlines():
-        # format: | M2 | Cost of capital worksheet | `B23` | Unlevered beta (β_u) | 1.460 |
-        parts = [p.strip() for p in line.split("|")]
-        if len(parts) < 7:
-            continue
-        if parts[1] in ("", "Module"):
-            continue
-        _leading, module, sheet, cell, _label, val, _trailing = parts[:7] + [""]*(7-len(parts))
-        cell = cell.strip("`")
-        val_str = val.strip()
-        if val_str in ("_fill in_", "", "—", "N/A"):
+    for sheet, cell, _label, _module in OUTPUT_CELLS_SPEC:
+        if sheet not in wb.sheetnames:
             out[(sheet, cell)] = None
             continue
-        # Normalize: strip $, commas, %. Convert % to decimal.
-        clean = val_str.replace(",", "").replace("$", "").strip()
-        is_pct = clean.endswith("%")
-        clean = clean.rstrip("%").strip()
-        try:
-            f = float(clean)
-            if is_pct:
-                f = f / 100.0
-            out[(sheet, cell)] = f
-        except ValueError:
+        v = wb[sheet][cell].value
+        if isinstance(v, (int, float)):
+            out[(sheet, cell)] = float(v)
+        else:
             out[(sheet, cell)] = None
     return out
 
@@ -292,15 +280,29 @@ def _fmt(v: float | None, pct_mode=False) -> str:
 
 
 def compare(ticker: str) -> str:
-    """Produce the comparison markdown for one ticker."""
-    pkg_path = REPO_ROOT / "docs" / "experiments" / f"ginzu_inputs_{ticker}.md"
-    if not pkg_path.exists():
-        return f"# {ticker}\n\nNo package found at `{pkg_path}`.\n"
+    """Produce the comparison markdown for one ticker.
 
-    ginzu_vals = _read_ginzu_values_from_package(pkg_path)
+    Reads Ginzu's outputs directly from
+      TEST_DATA/ginzu_prefilled/<TICKER>_ginzu_output.xlsx
+    which is the recalculated version of the pre-filled input workbook.
+    (User opens `<TICKER>_ginzu_input.xlsx`, saves as `_output.xlsx` after Excel recalcs.)
+
+    Falls back to `<TICKER>_ginzu_input.xlsx` if `_output.xlsx` doesn't exist —
+    Excel writes cached values back into the source file on save, so either name works.
+    """
+    prefill_dir = REPO_ROOT / "TEST_DATA" / "ginzu_prefilled"
+    output_xlsx = prefill_dir / f"{ticker}_ginzu_output.xlsx"
+    input_xlsx  = prefill_dir / f"{ticker}_ginzu_input.xlsx"
+    xlsx_path = output_xlsx if output_xlsx.exists() else input_xlsx
+    if not xlsx_path.exists():
+        return f"# {ticker}\n\nNo Ginzu workbook found at `{xlsx_path}`.\n"
+
+    ginzu_vals = _read_ginzu_values_from_excel(xlsx_path)
     n_filled = sum(1 for v in ginzu_vals.values() if v is not None)
     if n_filled == 0:
-        return f"# {ticker}\n\nSection D not filled in. Skipping.\n"
+        return (f"# {ticker}\n\nGinzu workbook at `{xlsx_path}` has no cached "
+                f"computed values — user must open it in Excel and save after "
+                f"recalculation. Skipping.\n")
 
     # Rebuild d
     dam = DamodaranStore.from_directory(str(REPO_ROOT / "knowledge_base" / "damodaran"))
@@ -327,23 +329,35 @@ def compare(ticker: str) -> str:
         lines.append("")
         lines.append("| Metric | Sheet · Cell | Ours | Ginzu | Δ (abs) | Δ (%) | Flag |")
         lines.append("|--------|--------------|------|-------|---------|-------|------|")
-        pct_metrics = {"B23","C57","B27","B37","B61","C61","B62","C62","E62","B13","C30","C31","B41","B54","D3","D12"}
+        # Pct metrics: only rates/weights/ratios, NOT betas or $ values.
+        pct_metrics = {
+            "B27",  # ERP used
+            "B37",  # Kd pre-tax
+            "B61", "C61",  # weights
+            "B62", "C62", "E62", "B13",  # Ke, Kd_at, WACC
+            "B41",  # failure probability
+            "B54",  # Price as % of value
+            "D3", "D12",  # operating margins
+            "C30", "C31",  # terminal WACC, cumulative discount factor (fraction)
+        }
         for sheet, cell, label in rows:
             ours = _our_value(sheet, cell, resp)
             theirs = ginzu_vals.get((sheet, cell))
             pct = cell in pct_metrics
             delta_abs = (ours - theirs) if (ours is not None and theirs is not None) else None
-            delta_pct = (delta_abs / theirs * 100) if (delta_abs is not None and theirs not in (None, 0)) else None
+            delta_pct_num = (delta_abs / theirs * 100) if (delta_abs is not None and theirs not in (None, 0)) else None
+            delta_pct_str = f"{delta_pct_num:+.1f}%" if delta_pct_num is not None else "—"
             flag = _flag(ours, theirs)
-            if flag == "✓": tot_match += 1
-            elif flag == "⚠": tot_small += 1
-            elif flag == "❌": tot_big += 1
+            if flag == "✓":
+                tot_match += 1
+            elif flag == "⚠":
+                tot_small += 1
+            elif flag == "❌":
+                tot_big += 1
             lines.append(
-                f"| {label} | {sheet} · `{cell}` "
-                f"| {_fmt(ours, pct)} | {_fmt(theirs, pct)} "
-                f"| {_fmt(delta_abs, pct)} "
-                f"| {delta_pct:+.1f}%" if delta_pct is not None else "| —" "|"
-                f" {flag} |"
+                f"| {label} | {sheet} · `{cell}` | "
+                f"{_fmt(ours, pct)} | {_fmt(theirs, pct)} | "
+                f"{_fmt(delta_abs, pct)} | {delta_pct_str} | {flag} |"
             )
         lines.append("")
 
