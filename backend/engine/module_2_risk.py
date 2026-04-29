@@ -271,14 +271,32 @@ def compute_cost_of_capital(
     approach_used = "detailed"
 
     # --- Unlevered beta ---
+    # Ginzu Understanding convention: "Single Business(US)" ALWAYS reaches for
+    # the US industry table (betas.xls), not the caller-provided industry.
+    # If the caller passed non-US industry data, we re-lookup via the callable.
     beta_u = 0.0
     beta_branch = m.beta_approach
     if m.beta_approach == "single_business_us":
-        beta_u = industry.beta_u_corrected_for_cash or industry.beta_u or 0.0
+        if industry.region != "US" and industry_lookup is not None:
+            # Force US-region lookup to honor the "Single Business(US)" selection
+            us_ind = industry_lookup(industry.industry_name, "US")
+            if us_ind is not None:
+                beta_u = us_ind.beta_u_corrected_for_cash or us_ind.beta_u or 0.0
+            else:
+                warnings.append(
+                    f"single_business_us: US row for '{industry.industry_name}' not found; "
+                    f"falling back to {industry.region} β_u."
+                )
+                beta_u = industry.beta_u_corrected_for_cash or industry.beta_u or 0.0
+        else:
+            beta_u = industry.beta_u_corrected_for_cash or industry.beta_u or 0.0
     elif m.beta_approach == "single_business_global":
-        # Use industry_global if provided; else fall back to US with a warning
-        if industry_global is not None and (industry_global.beta_u_corrected_for_cash or industry_global.beta_u):
-            beta_u = industry_global.beta_u_corrected_for_cash or industry_global.beta_u or 0.0
+        # Use industry_global if provided; else re-lookup via callable; else fall back with warning.
+        glb = industry_global
+        if glb is None and industry_lookup is not None:
+            glb = industry_lookup(industry.industry_name, "Global")
+        if glb is not None and (glb.beta_u_corrected_for_cash or glb.beta_u):
+            beta_u = glb.beta_u_corrected_for_cash or glb.beta_u or 0.0
         else:
             warnings.append("single_business_global: no Global industry data supplied; falling back to US β_u.")
             beta_u = industry.beta_u_corrected_for_cash or industry.beta_u or 0.0
@@ -386,7 +404,10 @@ def compute_cost_of_capital(
         else:
             rating, spread = lookup
             synthetic_rating_inferred = rating
-            kd_pretax = macro.risk_free_rate + spread + (macro.default_spread or 0.0)
+            # Ginzu convention: Kd = RF + rating_spread. Country default spread is
+            # NOT added on top (it's already baked into the rating-to-spread table
+            # via sovereign+corporate mixing).
+            kd_pretax = macro.risk_free_rate + spread
             kd_branch = f"synthetic_rating → {rating}"
     elif m.kd_approach == "actual_rating":
         if not m.actual_rating:
@@ -400,7 +421,8 @@ def compute_cost_of_capital(
                 kd_pretax = industry.cost_of_debt_pretax or (macro.risk_free_rate + (macro.default_spread or 0.0))
                 kd_branch = "industry_fallback (fallback)"
             else:
-                kd_pretax = macro.risk_free_rate + spread + (macro.default_spread or 0.0)
+                # Ginzu: Kd = RF + rating_spread (no separate default_spread add-on)
+                kd_pretax = macro.risk_free_rate + spread
                 kd_branch = f"actual_rating → {m.actual_rating}"
     elif m.kd_approach == "industry_fallback":
         kd_pretax = industry.cost_of_debt_pretax or (macro.risk_free_rate + (macro.default_spread or 0.0))

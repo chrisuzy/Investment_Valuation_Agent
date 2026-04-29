@@ -196,6 +196,28 @@ def _post_valuation(inputs: dict) -> dict:
     return json.loads(r.stdout)
 
 
+def _fetch_from_file(ticker: str) -> dict:
+    """Use the real fetch-from-file flow so industry lookup + LTM + country
+    macro go through production code paths."""
+    path = REPO_ROOT / "TEST_DATA" / f"TEST_{ticker}.xlsx"
+    r = subprocess.run(
+        ["curl", "-s", "-X", "POST", f"{BACKEND}/api/valuation/fetch-from-file",
+         "-F", f"file=@{path}", "-F", "region=US", "-F", "risk_free_rate=0.0425"],
+        capture_output=True, text=True, timeout=180,
+    )
+    return json.loads(r.stdout)
+
+
+def _patch(sid: str, overrides: dict) -> dict:
+    r = subprocess.run(
+        ["curl", "-s", "-X", "PATCH", f"{BACKEND}/api/valuation/{sid}",
+         "-H", "Content-Type: application/json",
+         "-d", json.dumps({"overrides": overrides})],
+        capture_output=True, text=True, timeout=120,
+    )
+    return json.loads(r.stdout)
+
+
 # Map each (sheet, cell) in OUTPUT_CELLS_SPEC → field in our backend response
 # so we can look up "what does our backend say" for every Ginzu metric.
 def _our_value(sheet: str, cell: str, resp: dict) -> float | None:
@@ -304,16 +326,96 @@ def compare(ticker: str) -> str:
                 f"computed values — user must open it in Excel and save after "
                 f"recalculation. Skipping.\n")
 
-    # Rebuild d
-    dam = DamodaranStore.from_directory(str(REPO_ROOT / "knowledge_base" / "damodaran"))
-    d = extract_data_for_ticker(ticker, dam, None)
-    inputs = _build_backend_input(ticker, d)
-    resp = _post_valuation(inputs)
+    # Use the REAL production flow: fetch-from-file goes through the industry
+    # resolver + LTM rotation + country macro lookup. Then PATCH to align the
+    # analyst's methodology choices (ERP approach, Kd approach, assumptions) to
+    # match whatever the user typed into the Ginzu workbook.
+    resp = _fetch_from_file(ticker)
     if "detail" in resp:
         return f"# {ticker}\n\nBackend error: {resp['detail']}\n"
+    sid = resp["id"]
+
+    # Pull key inputs straight from the USER'S GINZU WORKBOOK — these are the
+    # single source of truth for what assumptions to push to our backend.
+    import openpyxl
+    gwb = openpyxl.load_workbook(str(xlsx_path), data_only=True)
+    gin = gwb["Input sheet"]
+
+    def _g(cell):
+        v = gin[cell].value
+        return float(v) if isinstance(v, (int, float)) else v
+
+    # Build the override bundle using Ginzu's input-sheet values so comparison
+    # is apples-to-apples on assumptions (not just methodology).
+    overrides = {
+        # Value drivers (Input sheet rows 25-31)
+        "valuation_assumptions.revenue_growth_next_year": _g("B25"),
+        "valuation_assumptions.operating_margin_next_year": _g("B26"),
+        "valuation_assumptions.revenue_growth_years_2_5": _g("B27"),
+        "valuation_assumptions.target_operating_margin": _g("B28"),
+        "valuation_assumptions.margin_convergence_year": int(_g("B29") or 5),
+        "valuation_assumptions.sales_to_capital_high": _g("B30"),
+        "valuation_assumptions.sales_to_capital_stable": _g("B31"),
+        "macro_inputs.risk_free_rate": _g("B33"),
+        "macro_inputs.tax_rate_marginal": _g("B23"),
+        "effective_tax_rate_ciq": _g("B22"),
+        # Stable-period overrides (rows 56-60)
+        "valuation_assumptions.cost_of_capital_stable_override": _g("B57") if _g("B56") == "Yes" else None,
+        "valuation_assumptions.roic_stable_override":            _g("B60") if _g("B59") == "Yes" else None,
+        # Reinvestment lag (rows 67-68)
+        "valuation_assumptions.override_reinvestment_lag":       _g("B67") == "Yes",
+        "valuation_assumptions.reinvestment_lag_years":          int(_g("B68") or 1),
+    }
+
+    # Methodology choices — read from Cost-of-capital worksheet
+    coc = gwb["Cost of capital worksheet"]
+    beta_approach = str(coc["B21"].value or "").strip()
+    erp_approach  = str(coc["B25"].value or "").strip()
+    kd_approach   = str(coc["B33"].value or "").strip()
+
+    # Map Ginzu's labels to our enum values
+    BETA_MAP = {"Single Business(US)": "single_business_us",
+                "Single Business(Global)": "single_business_global",
+                "Multibusiness(US)": "multi_business_us",
+                "Multibusiness(Global)": "multi_business_global",
+                "Direct input": "direct_levered"}
+    ERP_MAP  = {"Country of incorporation": "country_of_incorporation",
+                "Operating countries":      "operating_countries",
+                "Operating regions":        "operating_regions",
+                "Will input":               "direct"}
+    KD_MAP   = {"Industry average": "industry_fallback",
+                "Direct input":     "direct",
+                "Synthetic rating": "synthetic_rating",
+                "Actual rating":    "actual_rating"}
+
+    if beta_approach in BETA_MAP:
+        overrides["methodology_choices.beta_approach"] = BETA_MAP[beta_approach]
+    if erp_approach in ERP_MAP:
+        overrides["methodology_choices.erp_approach"] = ERP_MAP[erp_approach]
+        # If Ginzu used operating-countries/regions, it computes a weighted ERP.
+        # We can't reproduce the weighting without the underlying revenue mix,
+        # so override with direct input = Ginzu's computed ERP from C27.
+        ginzu_erp = coc["B27"].value
+        if erp_approach in ("Operating countries", "Operating regions") and isinstance(ginzu_erp, (int, float)):
+            overrides["methodology_choices.erp_approach"]    = "direct"
+            overrides["methodology_choices.erp_direct_input"] = float(ginzu_erp)
+    if kd_approach in KD_MAP:
+        overrides["methodology_choices.kd_approach"] = KD_MAP[kd_approach]
+        if kd_approach == "Actual rating":
+            rating = coc["B35"].value
+            if rating:
+                overrides["methodology_choices.actual_rating"] = str(rating)
+
+    # Clean None values (PATCH should leave those untouched)
+    overrides = {k: v for k, v in overrides.items() if v is not None}
+
+    resp = _patch(sid, overrides)
+    if "detail" in resp:
+        return f"# {ticker}\n\nBackend error on PATCH: {resp['detail']}\n"
 
     # Walk through OUTPUT_CELLS_SPEC in order, compare each
-    lines = [f"# Ginzu vs Backend — {ticker} ({d['company_name']})", ""]
+    company_name = (resp.get("inputs", {}).get("company_name") or ticker)
+    lines = [f"# Ginzu vs Backend — {ticker} ({company_name})", ""]
     lines.append(f"**Source:** `TEST_DATA/TEST_{ticker}.xlsx`  ·  **Ginzu package:** `ginzu_inputs_{ticker}.md`")
     lines.append("")
     lines.append(f"Ginzu values filled in: **{n_filled} / {len(OUTPUT_CELLS_SPEC)}**")

@@ -25,56 +25,50 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Country → Damodaran region mapping
-# ---------------------------------------------------------------------------
-_COUNTRY_TO_REGION: dict[str, str] = {}
-
-# China / HK / Macau / Taiwan
-for _c in ("China", "Hong Kong", "Macau", "Taiwan"):
-    _COUNTRY_TO_REGION[_c] = "China"
-# India
-_COUNTRY_TO_REGION["India"] = "India"
-# Japan
-_COUNTRY_TO_REGION["Japan"] = "Japan"
-# Europe
-for _c in ("United Kingdom", "Germany", "France", "Italy", "Spain", "Netherlands",
-           "Switzerland", "Sweden", "Norway", "Denmark", "Finland", "Belgium",
-           "Austria", "Ireland", "Portugal", "Greece", "Luxembourg", "Poland",
-           "Czech Republic", "Hungary", "Romania", "Croatia", "Iceland",
-           "Liechtenstein", "Monaco", "Malta", "Cyprus", "Estonia", "Latvia",
-           "Lithuania", "Slovenia", "Slovakia", "Bulgaria"):
-    _COUNTRY_TO_REGION[_c] = "Europe"
-# US / Canada
-for _c in ("United States", "Canada"):
-    _COUNTRY_TO_REGION[_c] = "US"
-# Asia-Pacific (rest)
-for _c in ("South Korea", "Australia", "New Zealand", "Singapore"):
-    _COUNTRY_TO_REGION[_c] = "Global"
-# Middle East
-for _c in ("Israel", "Qatar", "Kuwait", "Bahrain", "Oman", "Jordan", "Lebanon"):
-    _COUNTRY_TO_REGION[_c] = "Global"
-# Emerging markets
-for _c in ("Brazil", "Mexico", "Argentina", "Chile", "Colombia", "Peru",
-           "South Africa", "Turkey", "Russia", "Saudi Arabia", "UAE",
-           "Egypt", "Nigeria", "Kenya", "Pakistan", "Bangladesh",
-           "Thailand", "Indonesia", "Malaysia", "Philippines", "Vietnam"):
-    _COUNTRY_TO_REGION[_c] = "Emerging"
-
-
-def _country_to_region(country: str) -> str:
-    """Map a company's country to the Damodaran region for industry data lookup."""
+# Ginzu Understanding convention: the primary "industry data" payload attached
+# to every valuation is the US industry table (betas.xls, wacc.xls, margin.xls).
+# The frontend Cost-of-Capital methodology selector then lets the analyst pick:
+#   - "Single Business(US)"     → use the US industry data (default; matches Ginzu)
+#   - "Single Business(Global)" → switch to the Global industry table
+#   - "Multi-business(US/Global)" → user-supplied EV-weighted segments
+#   - "Direct Input"            → user-supplied β
+#
+# Regional tables (China / Emerging / Europe / Japan / India / Rest) are still
+# available in the DamodaranStore but are NOT used for single-business β lookups.
+# They're retained because `ctryprem` country ERPs aggregate to region-level
+# ERPs for the "Operating Regions" ERP branch in module_2_risk.py.
+#
+# This function is kept for backward-compat with a few UI-only callers that
+# display which region a company is "classified into" — but it no longer drives
+# industry-data selection.
+def _country_to_region_display(country: str) -> str:
+    """Display-only region hint for a country. Does NOT drive industry lookup."""
     if not country:
         return "US"
-    # Exact match
-    if country in _COUNTRY_TO_REGION:
-        return _COUNTRY_TO_REGION[country]
-    # Partial match (e.g., "United States of America" → "United States")
-    country_lower = country.lower()
-    for key, region in _COUNTRY_TO_REGION.items():
-        if key.lower() in country_lower or country_lower in key.lower():
-            return region
-    # Default: try Global, fallback to US
+    c = country.lower()
+    if any(k in c for k in ("china", "hong kong", "macau", "taiwan")):
+        return "China"
+    if "india" in c:
+        return "India"
+    if "japan" in c:
+        return "Japan"
+    if any(k in c for k in ("kingdom", "germany", "france", "italy", "spain",
+                            "netherlands", "switzerland", "sweden", "norway",
+                            "denmark", "finland", "belgium", "austria", "ireland",
+                            "portugal", "greece")):
+        return "Europe"
+    if any(k in c for k in ("united states", "america", "canada")):
+        return "US"
     return "Global"
+
+
+# Alias for callers that still reference the old name. Kept to avoid churn;
+# always returns "US" so industry-data lookups default to Ginzu's convention.
+def _country_to_region(country: str) -> str:
+    """Always returns 'US' — industry-data region is decided by the analyst's
+    methodology_choices.beta_approach selector, not by the company's country.
+    This matches Ginzu's default behavior (Single Business(US))."""
+    return "US"
 
 router = APIRouter(prefix="/api")
 
@@ -231,17 +225,16 @@ def fetch_and_run(req: FetchRequest):
     if not industry_name:
         raise HTTPException(status_code=422, detail=f"Could not determine industry for '{req.ticker}'.")
 
-    # 2. Smart region lookup from company's country
-    detected_region = _country_to_region(country)
-    primary_region = req.region if req.region != "US" else detected_region
-
+    # 2. Industry lookup — ALWAYS use US region as the primary payload
+    # (Ginzu convention: Single Business(US) is the default regardless of firm
+    # location). Regional data is available through methodology_choices at runtime.
+    primary_region = "US"
     industry_data = store.lookup_industry(industry_name, region=primary_region)
     if industry_data is None:
-        for fallback in ("US", "Global"):
-            industry_data = store.lookup_industry(industry_name, region=fallback)
-            if industry_data:
-                primary_region = fallback
-                break
+        # Last-resort fallback: try Global
+        industry_data = store.lookup_industry(industry_name, region="Global")
+        if industry_data:
+            primary_region = "Global"
     if industry_data is None:
         available = store.list_industries("US")
         raise HTTPException(
@@ -406,19 +399,14 @@ async def fetch_from_file(
     if not industry_name:
         raise HTTPException(status_code=422, detail=f"Could not determine industry for '{ticker}'.")
 
-    # Smart region lookup: derive from company's country, not hard-coded
-    detected_region = _country_to_region(country)
-    primary_region = region if region != "US" else detected_region  # user override takes precedence
-
-    # Look up Damodaran data for the company's region
+    # Industry lookup — ALWAYS use US region (Ginzu convention: Single Business(US)).
+    # Analyst can override via methodology_choices.beta_approach on the frontend.
+    primary_region = "US"
     industry_data = store.lookup_industry(industry_name, region=primary_region)
     if industry_data is None:
-        # Fallback: try US, then Global
-        for fallback in ("US", "Global"):
-            industry_data = store.lookup_industry(industry_name, region=fallback)
-            if industry_data:
-                primary_region = fallback
-                break
+        industry_data = store.lookup_industry(industry_name, region="Global")
+        if industry_data:
+            primary_region = "Global"
     if industry_data is None:
         raise HTTPException(status_code=422, detail=f"Industry '{industry_name}' not found in any region.")
 
