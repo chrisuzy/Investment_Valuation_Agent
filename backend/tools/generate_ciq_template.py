@@ -111,11 +111,25 @@ def generate_template(default_ticker: str = "NVDA") -> Path:
     # Wrap these with ABS() in the template so values are positive from the start.
     EXPENSE_VARIABLES = {"interest_expense", "capex", "d_a", "operating_lease_expense"}
 
+    # Build lookup of currency-override tokens (e.g. "<FILING>") per variable.
+    # These are CIQ's magic 5th-argument values that resolve at query time to
+    # the company's actual filing / trading currency — no per-ticker hardcoding.
+    from data_sources.capiq_formula_map import ALL_FIELDS
+    _CCY_OVERRIDES = {f.variable_name: f.currency_override for f in ALL_FIELDS if f.currency_override}
+
     def add_formula_row(variable: str, mnemonic: str, period: str, description: str):
         nonlocal row
         # Build formula referencing $B$1 as ticker
-        # Use the full XLL path so CIQ plugin resolves both via COM and manual open
-        if period == "current":
+        # Use the full XLL path so CIQ plugin resolves both via COM and manual open.
+        # CIQ signature: CIQ(identifier, mnemonic, [period], [date], [currency])
+        ccy = _CCY_OVERRIDES.get(variable)
+        if ccy:
+            # Emit all 5 args. Empty "" for period/date when period == "current"
+            if period == "current":
+                ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","","","{ccy}")'
+            else:
+                ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","{period}","","{ccy}")'
+        elif period == "current":
             ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}")'
         else:
             ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","{period}")'
