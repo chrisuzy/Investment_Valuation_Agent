@@ -106,6 +106,148 @@ def _build_lookups(store: DamodaranStore):
     return _industry_lookup, _country_erp_lookup
 
 
+# ISO 4217 currency codes (common subset) — used as options in manual-entry
+# dropdowns when the exchange prefix is unknown.
+_ISO_CURRENCIES = [
+    "USD", "EUR", "GBP", "JPY", "CNY", "HKD", "CHF", "CAD", "AUD", "NZD",
+    "SEK", "NOK", "DKK", "SGD", "KRW", "TWD", "INR", "THB", "MYR", "IDR",
+    "PHP", "VND", "ILS", "SAR", "AED", "QAR", "KWD", "BHD", "OMR", "JOD",
+    "EGP", "ZAR", "NGN", "KES", "GHS", "MAD", "TND", "BRL", "MXN", "CLP",
+    "ARS", "COP", "PEN", "PLN", "CZK", "HUF", "RON", "BGN", "HRK", "TRY",
+    "RUB", "UAH", "PKR", "BDT", "LKR",
+]
+
+
+def _build_unresolved_fields(
+    inputs,
+    store: "DamodaranStore",
+    current: dict | None = None,
+    industry_resolved: bool = True,
+) -> list[dict]:
+    """Scan the valuation inputs for fields that couldn't be auto-resolved.
+
+    The frontend reads this list and presents manual-entry UI so the user can
+    fix gaps (e.g., industry missing from indname, effective tax #N/A, etc.)
+    instead of having the engine silently default.
+    """
+    unresolved: list[dict] = []
+
+    # --- Industry ---
+    ind = inputs.industry_data
+    if not industry_resolved:
+        # Industry couldn't be auto-looked-up; a placeholder was applied so the
+        # pipeline could run. Surface so user picks from the 94-industry dropdown.
+        unresolved.append({
+            "path": "industry_data.industry_name",
+            "kind": "enum",
+            "reason": (
+                f"Ticker not found in Damodaran's indname.xlsx or supplemental_companies.json. "
+                f"Placeholder industry '{ind.industry_name if ind else '?'}' applied so the valuation can run — "
+                f"please pick the correct industry."
+            ),
+            "options": store.list_industries("US"),
+            "current_value": ind.industry_name if ind else None,
+            "required": True,
+        })
+    elif ind is None or not ind.industry_name:
+        unresolved.append({
+            "path": "industry_data.industry_name",
+            "kind": "enum",
+            "reason": "Industry not set.",
+            "options": store.list_industries("US"),
+            "current_value": None,
+            "required": True,
+        })
+    elif ind.beta_u is None or ind.beta_u == 0:
+        unresolved.append({
+            "path": "industry_data.industry_name",
+            "kind": "enum",
+            "reason": f"Industry '{ind.industry_name}' classified but beta data is missing.",
+            "options": store.list_industries("US"),
+            "current_value": ind.industry_name,
+            "required": True,
+        })
+
+    # --- Country ---
+    macro = inputs.macro_inputs
+    countries = store.list_countries()
+    if not inputs.country or inputs.country not in countries:
+        unresolved.append({
+            "path": "country",
+            "kind": "country",
+            "reason": (
+                f"Country '{inputs.country}' not found in Damodaran country-risk dataset."
+                if inputs.country else
+                "CIQ did not return a country for this ticker."
+            ),
+            "options": countries,
+            "current_value": inputs.country,
+            "required": True,
+        })
+
+    # --- Tax rates ---
+    if macro.tax_rate_marginal is None or macro.tax_rate_marginal == 0:
+        unresolved.append({
+            "path": "macro_inputs.tax_rate_marginal",
+            "kind": "percentage",
+            "reason": "Marginal tax rate couldn't be looked up from countrytaxrates.xls.",
+            "current_value": macro.tax_rate_marginal,
+            "suggestion": 0.25,
+            "required": True,
+        })
+    if inputs.effective_tax_rate_ciq is None:
+        unresolved.append({
+            "path": "effective_tax_rate_ciq",
+            "kind": "percentage",
+            "reason": "CIQ returned no effective tax rate (often #N/A for firms with negative EBT).",
+            "current_value": None,
+            "suggestion": macro.tax_rate_marginal,
+            "required": False,
+        })
+
+    # --- Stock price currency ---
+    if not inputs.stock_price_currency:
+        unresolved.append({
+            "path": "stock_price_currency",
+            "kind": "currency",
+            "reason": "Exchange prefix not recognized in exchange_currency_map.py.",
+            "options": _ISO_CURRENCIES,
+            "current_value": None,
+            "required": True,
+        })
+
+    # --- FX rate unavailable + currencies differ ---
+    if (
+        inputs.reporting_currency
+        and inputs.stock_price_currency
+        and inputs.reporting_currency != inputs.stock_price_currency
+        and inputs.fx_rate is None
+    ):
+        unresolved.append({
+            "path": "fx_rate",
+            "kind": "number",
+            "reason": (
+                f"Currencies differ ({inputs.stock_price_currency} listing vs {inputs.reporting_currency} "
+                "reporting) but CIQ template didn't supply stock_price_reporting. "
+                "Re-run the CIQ template OR enter FX rate manually."
+            ),
+            "current_value": None,
+            "required": True,
+        })
+
+    # --- Shares outstanding ---
+    if inputs.raw_financials and not inputs.raw_financials[0].shares_outstanding:
+        unresolved.append({
+            "path": "raw_financials.0.shares_outstanding",
+            "kind": "number",
+            "reason": "Shares outstanding missing from CIQ (no IQ_BASIC_WEIGHT value).",
+            "current_value": None,
+            "required": True,
+        })
+
+    return unresolved
+
+
 def _get_industry_mapper() -> IndustryMapper:
     global _industry_mapper
     if _industry_mapper is None:
@@ -164,6 +306,7 @@ def _report_to_dict(session) -> dict:
         "warnings": r.warnings,
         "source_metadata": session.source_tracker.to_dict() if session.source_tracker else {},
         "industry_stats": industry_stats,
+        "unresolved_fields": getattr(session, "unresolved_fields", []) or [],
     }
     return result
 
@@ -387,6 +530,10 @@ async def fetch_from_file(
     if not ticker:
         raise HTTPException(status_code=422, detail="No ticker found in B1 of the uploaded file.")
 
+    # Hoist CIQ dict sections so they're in scope for the whole function
+    # (industry fallback path needs `current` for primary_exchange lookup).
+    current = ciq_data.get("current") or {}
+
     store = _get_damodaran_store()
     mapper = _get_industry_mapper()
 
@@ -396,19 +543,30 @@ async def fetch_from_file(
     country = company_info.country if company_info else "United States"
     industry_name = industry_override or (company_info.industry_group if company_info else None)
 
-    if not industry_name:
-        raise HTTPException(status_code=422, detail=f"Could not determine industry for '{ticker}'.")
-
     # Industry lookup — ALWAYS use US region (Ginzu convention: Single Business(US)).
     # Analyst can override via methodology_choices.beta_approach on the frontend.
+    # GRACEFUL DEGRADATION: if industry can't be resolved, use a placeholder and
+    # surface via unresolved_fields so the user can manually select from the
+    # dropdown of 94 Damodaran industries. Don't block the upload.
     primary_region = "US"
-    industry_data = store.lookup_industry(industry_name, region=primary_region)
-    if industry_data is None:
+    industry_resolved = False
+    industry_data = store.lookup_industry(industry_name, region=primary_region) if industry_name else None
+    if industry_data is None and industry_name:
         industry_data = store.lookup_industry(industry_name, region="Global")
         if industry_data:
             primary_region = "Global"
-    if industry_data is None:
-        raise HTTPException(status_code=422, detail=f"Industry '{industry_name}' not found in any region.")
+    if industry_data is not None:
+        industry_resolved = True
+    else:
+        # Last-resort placeholder — use a safe default so the pipeline can run.
+        # The unresolved_fields list will flag this so the user picks an industry.
+        placeholder_name = industry_name or "Semiconductor"
+        industry_data = store.lookup_industry(placeholder_name, region="US")
+        if industry_data is None:
+            available = store.list_industries("US")
+            industry_data = store.lookup_industry(available[0], region="US") if available else None
+        if industry_data is None:
+            raise HTTPException(status_code=422, detail="Damodaran industry store is empty; cannot build valuation.")
 
     macro = store.lookup_country(country)
     if macro is None:
@@ -418,7 +576,9 @@ async def fetch_from_file(
         macro.risk_free_rate = risk_free_rate
 
     # Always show Global as comparison (unless primary is already Global)
-    industry_data_global = store.lookup_industry(industry_name, region="Global") if primary_region != "Global" else None
+    # Use the resolved industry name (may differ from original if fallback was applied)
+    resolved_industry = industry_data.industry_name if industry_data else industry_name
+    industry_data_global = store.lookup_industry(resolved_industry, region="Global") if (primary_region != "Global" and resolved_industry) else None
 
     # Determine stock price currency: try exchange_ticker first, then CIQ primary_exchange
     stock_price_currency = None
@@ -440,7 +600,7 @@ async def fetch_from_file(
 
     # Build RawFinancials from the parsed CIQ data
     annual = ciq_data["annual"]
-    current = ciq_data["current"]
+    # `current` already hoisted above; this keeps the code readable at the usage site
     period_dates = ciq_data.get("period_dates", {})
 
     # Derive base fiscal year from period_date_annual (FY-0)
@@ -666,7 +826,11 @@ async def fetch_from_file(
         from engine.orchestrator import ValuationReport
         report = ValuationReport(ticker=ticker, warnings=["No financial data in uploaded file."])
 
-    session = create_session(inputs, report)
+    # Build the unresolved_fields list — places where auto-resolve failed and
+    # the user should manually override. Each entry describes what to show.
+    unresolved = _build_unresolved_fields(inputs, store, current, industry_resolved=industry_resolved)
+
+    session = create_session(inputs, report, unresolved_fields=unresolved)
     result = _report_to_dict(session)
     result["company_name"] = company_name
     result["country"] = country

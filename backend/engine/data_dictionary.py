@@ -420,6 +420,26 @@ class CompanyMetrics(BaseModel):
     cost_of_capital: float | None = Field(default=None, description="WACC")
 
 
+class UnresolvedField(BaseModel):
+    """A data field that couldn't be auto-resolved during CIQ ingestion.
+
+    The frontend reads this list and presents manual-entry UI (dropdown for
+    enum kinds, numeric input for number, etc.). The user resolves each
+    field via PATCH and the valuation re-runs.
+
+    This is the graceful-degradation mechanism: when industry lookup misses,
+    when CIQ returns #N/A, when an exchange prefix is unknown — instead of
+    silently defaulting, we report the gap so the user can fix it."""
+
+    path: str = Field(description="Dot-path to the field, e.g. 'industry_data.industry_name'")
+    kind: str = Field(description="'enum' | 'number' | 'percentage' | 'currency' | 'country'")
+    reason: str = Field(description="Human-readable explanation of why auto-resolve failed")
+    options: list[str] | None = Field(default=None, description="For enum/currency/country kinds")
+    current_value: object | None = Field(default=None, description="What we defaulted to (may be None)")
+    required: bool = Field(default=True, description="Whether downstream math blocks on this")
+    suggestion: object | None = Field(default=None, description="Heuristic guess (e.g., industry median)")
+
+
 class CompanyValuationInput(BaseModel):
     ticker: str
     company_name: str | None = Field(default=None)

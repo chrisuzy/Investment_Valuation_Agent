@@ -16,6 +16,7 @@ class Session:
     inputs: CompanyValuationInput
     report: ValuationReport
     source_tracker: SourceTracker | None = None
+    unresolved_fields: list[dict] = field(default_factory=list)
 
 
 _sessions: dict[str, Session] = {}
@@ -25,9 +26,16 @@ def create_session(
     inputs: CompanyValuationInput,
     report: ValuationReport,
     source_tracker: SourceTracker | None = None,
+    unresolved_fields: list[dict] | None = None,
 ) -> Session:
     sid = uuid.uuid4().hex[:12]
-    session = Session(id=sid, inputs=inputs, report=report, source_tracker=source_tracker or SourceTracker())
+    session = Session(
+        id=sid,
+        inputs=inputs,
+        report=report,
+        source_tracker=source_tracker or SourceTracker(),
+        unresolved_fields=unresolved_fields or [],
+    )
     _sessions[sid] = session
     return session
 

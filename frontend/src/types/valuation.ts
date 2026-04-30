@@ -332,6 +332,16 @@ export interface IndustryStatDistributions {
   debt_to_capital: IndustryStatQuartile;
 }
 
+export interface UnresolvedField {
+  path: string;                                       // e.g. "industry_data.industry_name"
+  kind: "enum" | "number" | "percentage" | "currency" | "country";
+  reason: string;
+  options?: string[] | null;                          // for enum/currency/country
+  current_value?: unknown;
+  required: boolean;
+  suggestion?: unknown;
+}
+
 export interface ValuationResponse {
   id: string;
   ticker: string;
@@ -346,4 +356,5 @@ export interface ValuationResponse {
   warnings: string[];
   source_metadata: Record<string, string>;
   industry_stats?: IndustryStatDistributions | null;
+  unresolved_fields?: UnresolvedField[];
 }

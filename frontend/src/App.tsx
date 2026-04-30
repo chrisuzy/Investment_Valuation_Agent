@@ -17,6 +17,7 @@ import FailureRate from './pages/FailureRate';
 import TrailingTwelveMonth from './pages/TrailingTwelveMonth';
 import AnswerKeys from './pages/AnswerKeys';
 import CurrencyBanner from './components/CurrencyBanner';
+import UnresolvedFieldsPanel from './components/UnresolvedFieldsPanel';
 import type { ValuationResponse } from './types/valuation';
 import { fetchByTicker, createValuation, patchValuation, downloadTemplate, fetchFromFile, downloadFullWorkbook, searchCompanies, type PatchValue } from './api/client';
 import type { SearchResult } from './api/client';
@@ -356,6 +357,7 @@ export default function App() {
               </div>
             )}
             <CurrencyBanner data={data} />
+            <UnresolvedFieldsPanel data={data} onPatch={handleCellUpdate} />
             <Routes>
               <Route path="/"                  element={<InputSheet data={data} sessionId={sessionId} onUpdate={handleCellUpdate} />} />
               <Route path="/summary"           element={<SummarySheet data={data} sessionId={sessionId} />} />
