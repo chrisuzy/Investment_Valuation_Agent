@@ -55,11 +55,20 @@ export default function GeographicSegmentsPanel({ data, onPatch }: Props) {
   if (segments.length === 0) {
     return (
       <div className="bg-gray-50 border border-gray-200 rounded p-3 text-xs text-gray-600">
-        No geographic segments fetched from CIQ. Re-run the template with the
-        geo-segment rows to populate this section.
+        <div className="font-semibold text-gray-800 mb-1">No geographic segments fetched from CIQ</div>
+        <div>
+          Your uploaded template does not contain the <code className="bg-white px-1 py-0.5 rounded text-[10px]">IQ_GEO_SEG_NAME_ABS</code> /
+          <code className="bg-white px-1 py-0.5 rounded text-[10px]">IQ_GEO_SEG_REV_ABS</code> rows.
+          Download the latest template from <code className="bg-white px-1 py-0.5 rounded text-[10px]">knowledge_base/ciq_fetches/CIQ_Fetch_Template.xlsx</code>,
+          populate it in Excel with your ticker, and re-upload.
+        </div>
       </div>
     );
   }
+
+  const erpApproach = data.inputs.methodology_choices?.erp_approach;
+  const usingBlended = erpApproach === "operating_countries" || erpApproach === "operating_regions";
+  const currentErp = data.cost_of_capital?.equity_risk_premium ?? null;
 
   // Current (stored) blended ERP, derived from whatever resolution each segment has
   const blendedStored = useMemo(() => {
@@ -138,14 +147,29 @@ export default function GeographicSegmentsPanel({ data, onPatch }: Props) {
 
   return (
     <section className="bg-white border border-gray-300 rounded-md shadow-sm">
-      <header className="px-4 py-2 bg-gray-100 border-b border-gray-300">
-        <h2 className="text-sm font-bold text-gray-800">Geographic Revenue Mix</h2>
-        <p className="text-xs text-gray-500 mt-0.5">
-          CIQ-fetched segments with pre-calculated revenue %. Each row shows the
-          resolver's auto-suggestion; use the dropdown to manually map to a
-          Damodaran country or region. Blended ERP feeds the "Operating countries"
-          ERP approach in WACC.
-        </p>
+      <header className="px-4 py-2 bg-gray-100 border-b border-gray-300 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-bold text-gray-800">Geographic Revenue Mix</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            CIQ-fetched segments with pre-calculated revenue %. Use the dropdown
+            to manually map each row to a Damodaran country or region. Blended
+            ERP feeds the "Operating countries" ERP approach in WACC.
+          </p>
+        </div>
+        {!usingBlended && onPatch && (
+          <button
+            onClick={() => onPatch("methodology_choices.erp_approach", "operating_countries")}
+            className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-indigo-600 text-white rounded hover:bg-indigo-700"
+            title={`Currently using ERP approach "${erpApproach}" (ERP ${currentErp ? (currentErp*100).toFixed(2)+"%" : "?"}). Click to switch to operating-countries so WACC uses the blended ERP computed below.`}
+          >
+            Use blended ERP in WACC →
+          </button>
+        )}
+        {usingBlended && (
+          <div className="shrink-0 text-xs bg-green-100 border border-green-300 text-green-800 px-2 py-1 rounded font-semibold">
+            ✓ Active in WACC
+          </div>
+        )}
       </header>
       <div className="p-4 space-y-3">
         <table className="w-full text-xs">
