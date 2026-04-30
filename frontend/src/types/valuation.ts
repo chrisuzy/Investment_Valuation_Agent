@@ -24,10 +24,12 @@ export interface RawFinancials {
   cash_and_marketable_securities: number | null;
   bv_equity: number | null;
   bv_debt: number | null;
-  mv_equity: number | null;
+  mv_equity: number | null;               // reporting currency — for WACC math
+  mv_equity_listing: number | null;        // listing currency — for display
   mv_debt: number | null;
   shares_outstanding: number | null;
-  stock_price: number | null;
+  stock_price: number | null;              // listing currency — matches broker view
+  stock_price_reporting: number | null;    // reporting currency — for cross-ccy comparison
   cross_holdings: number | null;
   minority_interests: number | null;
   r_and_d_expense: number | null;
@@ -294,6 +296,9 @@ export interface CompanyValuationInput {
   country: string | null;
   reporting_currency: string | null;
   stock_price_currency: string | null;
+  fx_rate: number | null;                    // listing ccy → reporting ccy multiplier
+  fx_rate_source: string;                    // "CIQ implied" | "same currency" | "unavailable" | "unknown"
+  fx_rate_date: string | null;
   raw_financials: RawFinancials[];
   quarterly_financials: RawFinancials[];
   quarters_since_10k: number;

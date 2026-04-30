@@ -463,6 +463,24 @@ async def fetch_from_file(
             data.update({k: v for k, v in current.items()
                          if k not in ("reporting_currency", "primary_exchange")
                          and v is not None})
+        # Currency handling (FY0 only — market/listing data doesn't exist for prior years):
+        # - `mv_equity` is populated with the REPORTING-currency value for WACC math.
+        #   If the <FILING>-override field is missing (e.g., CIQ template hasn't been
+        #   regenerated with the new fields yet), fall back to the listing-currency
+        #   mv_equity as the math payload. This degrades gracefully: the Phase-2
+        #   fallback UI will flag it.
+        # - `mv_equity_listing` preserves the as-traded (listing-ccy) value for UI display.
+        # - `stock_price` stays as the listing-ccy price (UI continuity with brokers).
+        # - `stock_price_reporting` is the same price converted to reporting ccy.
+        if fy_offset == 0:
+            mv_listing   = _fval_or_none(data, "mv_equity")              # always listing ccy
+            mv_reporting = _fval_or_none(data, "mv_equity_reporting")    # None if old template
+            mv_for_math  = mv_reporting if mv_reporting is not None else mv_listing
+            sp_listing   = _fval_or_none(data, "stock_price")
+            sp_reporting = _fval_or_none(data, "stock_price_reporting")
+        else:
+            mv_listing = mv_reporting = mv_for_math = None
+            sp_listing = sp_reporting = None
         rf = RawFinancials(
             fiscal_year=base_fy_year - fy_offset,
             revenues=_fval(data, "revenues"),
@@ -478,10 +496,12 @@ async def fetch_from_file(
             cash_and_marketable_securities=_fval_or_none(data, "cash_and_marketable_securities"),
             bv_equity=_fval_or_none(data, "bv_equity"),
             bv_debt=_fval_or_none(data, "bv_debt"),
-            mv_equity=_fval_or_none(data, "mv_equity"),
+            mv_equity=mv_for_math if fy_offset == 0 else _fval_or_none(data, "mv_equity"),
+            mv_equity_listing=mv_listing,
             mv_debt=_fval_or_none(data, "mv_debt"),
             shares_outstanding=_fval_or_none(data, "shares_outstanding"),
-            stock_price=_fval_or_none(data, "stock_price"),
+            stock_price=sp_listing if fy_offset == 0 else _fval_or_none(data, "stock_price"),
+            stock_price_reporting=sp_reporting,
             cross_holdings=_fval_or_none(data, "cross_holdings"),
             minority_interests=_fval_or_none(data, "minority_interests"),
             r_and_d_expense=_fval_or_none(data, "r_and_d_expense"),
@@ -599,12 +619,31 @@ async def fetch_from_file(
     # Get CIQ-fetched effective tax rate (from current/market data)
     effective_tax_rate_ciq_val = _fval_or_none(current, "effective_tax_rate_ciq")
 
+    # Derive FX rate (listing → reporting) from the two CIQ stock-price variants.
+    # Only valid when BOTH are present and non-zero. Otherwise mark unavailable
+    # and downstream math falls back to listing-currency mv_equity (with warning).
+    fx_rate = None
+    fx_rate_source = "unknown"
+    sp_listing = _fval_or_none(current, "stock_price")
+    sp_reporting = _fval_or_none(current, "stock_price_reporting")
+    if reporting_currency and stock_price_currency and reporting_currency == stock_price_currency:
+        fx_rate = 1.0
+        fx_rate_source = "same currency"
+    elif sp_listing and sp_reporting and sp_listing > 0:
+        fx_rate = sp_reporting / sp_listing
+        fx_rate_source = "CIQ implied"
+    elif sp_listing and sp_reporting is None:
+        fx_rate_source = "unavailable (CIQ template missing stock_price_reporting)"
+
     inputs = CompanyValuationInput(
         ticker=ticker,
         company_name=company_name,
         country=country,
         reporting_currency=reporting_currency,
         stock_price_currency=stock_price_currency,
+        fx_rate=fx_rate,
+        fx_rate_source=fx_rate_source,
+        fx_rate_date=period_date_10k or period_date_10q,
         raw_financials=raw_financials,
         quarterly_financials=quarterly_financials,
         period_date_10k=period_date_10k,

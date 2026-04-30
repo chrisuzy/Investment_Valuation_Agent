@@ -34,6 +34,7 @@ EXCHANGE_CURRENCY: dict[str, str] = {
     "HLSE": "EUR",
     "OSE": "NOK",
     "CSE": "DKK",
+    "CPSE": "DKK",
     "ISE": "EUR",
     "MOEX": "RUB",
     "WSE": "PLN",

@@ -42,10 +42,12 @@ class RawFinancials(BaseModel):
     cash_and_marketable_securities: float | None = Field(default=None, description="Cash + marketable securities")
     bv_equity: float | None = Field(default=None, description="Book value of equity")
     bv_debt: float | None = Field(default=None, description="Book value of debt")
-    mv_equity: float | None = Field(default=None, description="Market cap")
-    mv_debt: float | None = Field(default=None, description="Market value of debt")
+    mv_equity: float | None = Field(default=None, description="Market cap — reporting currency (for WACC math)")
+    mv_equity_listing: float | None = Field(default=None, description="Market cap as-traded — listing currency (for display)")
+    mv_debt: float | None = Field(default=None, description="Market value of debt (reporting currency)")
     shares_outstanding: float | None = Field(default=None, description="Primary shares outstanding")
-    stock_price: float | None = Field(default=None, description="Current stock price")
+    stock_price: float | None = Field(default=None, description="Current stock price — listing currency")
+    stock_price_reporting: float | None = Field(default=None, description="Current stock price — reporting currency (for cross-ccy comparison)")
     cross_holdings: float | None = Field(default=None, description="Investments in affiliates / cross holdings")
     minority_interests: float | None = Field(default=None, description="Minority interests")
     r_and_d_expense: float | None = Field(default=None, description="R&D expense")
@@ -422,8 +424,14 @@ class CompanyValuationInput(BaseModel):
     ticker: str
     company_name: str | None = Field(default=None)
     country: str | None = Field(default=None)
-    reporting_currency: str | None = Field(default=None, description="Currency of financial statements")
+    reporting_currency: str | None = Field(default=None, description="Currency of financial statements (math currency)")
     stock_price_currency: str | None = Field(default=None, description="Currency of listed stock price")
+    # FX rate: multiplier that converts a LISTING-currency number to the REPORTING currency.
+    # Example — Lenovo: stock_price=11.83 HKD, stock_price_reporting=1.52 USD → fx_rate = 1.52 / 11.83 ≈ 0.128
+    # When reporting_currency == stock_price_currency, fx_rate = 1.0.
+    fx_rate: float | None = Field(default=None, description="FX: listing ccy → reporting ccy multiplier")
+    fx_rate_source: str = Field(default="unknown", description="'CIQ implied' | 'manual' | 'unavailable' | 'unknown'")
+    fx_rate_date: str | None = Field(default=None, description="Date of the FX rate (usually the LTM balance-sheet date)")
     raw_financials: list[RawFinancials] = Field(description="Multi-year, most recent first")
     quarterly_financials: list[RawFinancials] = Field(default_factory=list, description="Quarterly data for LTM (FQ-0..FQ-3)")
     quarters_since_10k: int = Field(default=0, description="Quarters since last annual filing (1-4)")

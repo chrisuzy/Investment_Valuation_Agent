@@ -1,6 +1,7 @@
 import type { ValuationResponse } from '../types/valuation';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
+import DualCurrency from '../components/DualCurrency';
 
 // Formatters
 function pct(v: number | null | undefined): string {
@@ -300,16 +301,32 @@ export default function SummarySheet({ data }: { data: ValuationResponse; sessio
             <SpreadsheetCell value={num(dcf.value_per_share_pre_options)} type="calc" bold />
           </tr>
           <tr>
-            <SpreadsheetCell value="Value per Share (final)" type="label" bold />
-            <SpreadsheetCell value={num(data.final?.value_per_share)} type="calc" bold tooltip="After subtracting option dilution" />
+            <SpreadsheetCell value={`Value per Share (final, ${data.inputs.reporting_currency || '?'})`} type="label" bold />
+            <td className="border px-1.5 py-0.5 bg-green-100 border-green-300 text-right whitespace-nowrap font-bold"
+                title="After subtracting option dilution — in reporting currency">
+              <DualCurrency valueReporting={data.final?.value_per_share} reportingCcy={data.inputs.reporting_currency} listingCcy={data.inputs.stock_price_currency} fxRate={data.inputs.fx_rate} />
+            </td>
           </tr>
           <tr>
-            <SpreadsheetCell value="Market Price" type="label" />
-            <SpreadsheetCell value={num(fin0?.stock_price)} type="financial" />
+            <SpreadsheetCell value={`Market Price (${data.inputs.stock_price_currency || '?'})`} type="label" />
+            <td className="border px-1.5 py-0.5 bg-blue-100 border-blue-300 text-right whitespace-nowrap"
+                title={`Stock price in listing currency ${data.inputs.stock_price_currency || '?'}; also shown converted to reporting ccy ${data.inputs.reporting_currency || '?'} for apples-to-apples vs VPS`}>
+              <DualCurrency valueListing={fin0?.stock_price} reportingCcy={data.inputs.reporting_currency} listingCcy={data.inputs.stock_price_currency} fxRate={data.inputs.fx_rate} primary="listing" />
+            </td>
           </tr>
           <tr>
-            <SpreadsheetCell value="Price / Value" type="label" bold />
-            <SpreadsheetCell value={(fin0?.stock_price && data.final?.value_per_share) ? pct(fin0.stock_price / data.final.value_per_share - 1) : '—'} type="calc" bold tooltip="Positive = market pays a premium to intrinsic; Negative = undervalued" />
+            <SpreadsheetCell value="Price / Value (reporting-ccy basis)" type="label" bold />
+            <SpreadsheetCell value={(() => {
+              const rep = data.inputs.reporting_currency;
+              const list = data.inputs.stock_price_currency;
+              const fx = data.inputs.fx_rate;
+              const vps = data.final?.value_per_share;
+              const px = fin0?.stock_price;
+              if (!vps || !px) return '—';
+              // Convert market price to reporting ccy for apples-to-apples
+              const pxInReporting = (rep === list || fx == null) ? px : px * fx;
+              return pct(pxInReporting / vps - 1);
+            })()} type="calc" bold tooltip="Both VPS and market price expressed in reporting currency. Positive = market pays a premium to intrinsic DCF; Negative = undervalued on DCF." />
           </tr>
         </tbody>
       </SpreadsheetGrid>

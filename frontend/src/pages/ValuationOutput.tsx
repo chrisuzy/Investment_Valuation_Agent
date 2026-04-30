@@ -3,6 +3,8 @@ import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
 import { ciq, formula, backendField, user } from '../lib/sources';
+import DualCurrency from '../components/DualCurrency';
+import { fmtMoneyShort } from '../lib/currency';
 
 // ---------- helpers ----------
 
@@ -315,12 +317,42 @@ export default function ValuationOutput({ data, sessionId }: { data: ValuationRe
             formula('= V_equity − Options'))}
           {bridgeRow('Number of shares', sharesOutstanding,
             ciq(inputs.ticker, 'IQ_BASIC_WEIGHT', 'IQ_FQ-0'))}
-          {bridgeRow('Value per share', valuePerShare,
-            formula('VPS = V_equity_common / shares') + ' — ' + backendField('final.value_per_share'))}
-          {bridgeRow('Current price', currentPrice,
-            ciq(inputs.ticker, 'IQ_CLOSEPRICE'))}
-          {bridgeRow('Price as % of value', pct(priceAsPctOfValue),
-            formula('Market / DCF ratio', '> 1 = overvalued on DCF; < 1 = undervalued'))}
+          {(() => {
+            const repCcy = inputs.reporting_currency;
+            const listCcy = inputs.stock_price_currency;
+            const fxRate = inputs.fx_rate;
+            const marketListing = currentPrice;            // stock_price — listing ccy
+            const marketReporting = fxRate != null && marketListing != null ? marketListing * fxRate : marketListing;
+            const vpsReporting = valuePerShare;            // VPS — reporting ccy
+            const marketForCompare = marketReporting;       // both sides in reporting ccy
+            const ratio = vpsReporting != null && marketForCompare != null && vpsReporting !== 0
+              ? marketForCompare / vpsReporting : undefined;
+            return (
+              <>
+                <tr>
+                  <SpreadsheetCell value="Value per share (reporting ccy)" type="label" align="left" width="320px" />
+                  <td className="border px-1.5 py-0.5 bg-green-100 border-green-300 text-right whitespace-nowrap"
+                      title={formula('VPS = V_equity_common / shares') + ' — ' + backendField('final.value_per_share')}>
+                    <DualCurrency valueReporting={vpsReporting} reportingCcy={repCcy} listingCcy={listCcy} fxRate={fxRate} />
+                  </td>
+                </tr>
+                <tr>
+                  <SpreadsheetCell value="Current market price (listing ccy)" type="label" align="left" width="320px" />
+                  <td className="border px-1.5 py-0.5 bg-green-100 border-green-300 text-right whitespace-nowrap"
+                      title={ciq(inputs.ticker, 'IQ_CLOSEPRICE') + ` — displayed in listing ccy ${listCcy || '?'}; also shown converted to reporting ccy ${repCcy || '?'} for apples-to-apples comparison with VPS`}>
+                    <DualCurrency valueListing={marketListing} reportingCcy={repCcy} listingCcy={listCcy} fxRate={fxRate} primary="listing" />
+                  </td>
+                </tr>
+                <tr>
+                  <SpreadsheetCell value="Price / Value (reporting-ccy basis)" type="label" align="left" width="320px" />
+                  <td className="border px-1.5 py-0.5 bg-green-100 border-green-300 text-right whitespace-nowrap font-bold"
+                      title={`Market ${fmtMoneyShort(marketForCompare, repCcy)} / VPS ${fmtMoneyShort(vpsReporting, repCcy)} — both in ${repCcy || '?'}. > 1 = overvalued on DCF; < 1 = undervalued.`}>
+                    {ratio != null ? `${ratio.toFixed(2)}x` : '—'}
+                  </td>
+                </tr>
+              </>
+            );
+          })()}
         </tbody>
       </SpreadsheetGrid>
     </div>

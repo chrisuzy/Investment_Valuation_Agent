@@ -16,6 +16,7 @@ import CostOfCapital from './pages/CostOfCapital';
 import FailureRate from './pages/FailureRate';
 import TrailingTwelveMonth from './pages/TrailingTwelveMonth';
 import AnswerKeys from './pages/AnswerKeys';
+import CurrencyBanner from './components/CurrencyBanner';
 import type { ValuationResponse } from './types/valuation';
 import { fetchByTicker, createValuation, patchValuation, downloadTemplate, fetchFromFile, downloadFullWorkbook, searchCompanies, type PatchValue } from './api/client';
 import type { SearchResult } from './api/client';
@@ -354,6 +355,7 @@ export default function App() {
                 </div>
               </div>
             )}
+            <CurrencyBanner data={data} />
             <Routes>
               <Route path="/"                  element={<InputSheet data={data} sessionId={sessionId} onUpdate={handleCellUpdate} />} />
               <Route path="/summary"           element={<SummarySheet data={data} sessionId={sessionId} />} />

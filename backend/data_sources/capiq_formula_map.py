@@ -20,6 +20,10 @@ class CIQField:
     mnemonic: str            # CIQ mnemonic (e.g., "IQ_TOTAL_REV")
     is_balance_sheet: bool = False  # True = point-in-time, False = flow (period)
     description: str = ""
+    # Optional 5th-arg currency override for =CIQ(...). E.g. "<FILING>" → return
+    # the value converted to the filing (reporting) currency. Without this, CIQ
+    # returns values in the listing currency for market-data items.
+    currency_override: str | None = None
 
 
 # ──────────────────────────────────────────────────────────────
@@ -56,10 +60,17 @@ BALANCE_SHEET_FIELDS = [
 # Market / Pricing items (typically current/LTM only)
 # ──────────────────────────────────────────────────────────────
 MARKET_FIELDS = [
-    CIQField("stock_price",          "IQ_CLOSEPRICE",        description="Closing Stock Price"),
-    CIQField("mv_equity",            "IQ_MARKETCAP",         description="Market Capitalization"),
-    CIQField("reporting_currency",   "IQ_FILING_CURRENCY",   description="Filing/Reporting Currency"),
-    CIQField("primary_exchange",     "IQ_EXCHANGE",          description="Primary Exchange Listing"),
+    CIQField("stock_price",            "IQ_CLOSEPRICE",      description="Closing Stock Price (listing currency)"),
+    CIQField("mv_equity",              "IQ_MARKETCAP",       description="Market Capitalization (listing currency)"),
+    # Reporting-currency variants — CIQ's 5th argument <FILING> returns values
+    # converted to the filing/reporting currency. Used to derive the FX rate
+    # and to feed WACC math (which requires everything in reporting currency).
+    CIQField("stock_price_reporting",  "IQ_CLOSEPRICE", description="Closing Stock Price (reporting currency)",
+             currency_override="<FILING>"),
+    CIQField("mv_equity_reporting",    "IQ_MARKETCAP",  description="Market Capitalization (reporting currency)",
+             currency_override="<FILING>"),
+    CIQField("reporting_currency",     "IQ_FILING_CURRENCY", description="Filing/Reporting Currency"),
+    CIQField("primary_exchange",       "IQ_EXCHANGE",        description="Primary Exchange Listing"),
     CIQField("effective_tax_rate_ciq", "IQ_EFFECT_TAX_RATE", description="Effective Tax Rate (CIQ, in %)"),
 ]
 
@@ -141,8 +152,20 @@ def generate_ciq_formulas(
     # Expense-type fields: wrap with ABS() so values are always positive (Damodaran convention)
     _EXPENSE_VARS = {"interest_expense", "capex", "d_a", "operating_lease_expense"}
 
+    # Lookup table for currency overrides by variable name (populated below)
+    _CCY_OVERRIDES: dict[str, str] = {
+        f.variable_name: f.currency_override
+        for f in ALL_FIELDS if f.currency_override
+    }
+
     def _make_formula(var_name: str, mnemonic: str, period: str | None) -> str:
-        if period:
+        # CIQ signature: =CIQ(identifier, mnemonic, [period], [date], [currency])
+        # Currency override goes in position 5. Fill empty period/date as "".
+        ccy = _CCY_OVERRIDES.get(var_name)
+        if ccy:
+            per = period or ""
+            ciq_call = f'CIQ("{ticker}","{mnemonic}","{per}","","{ccy}")'
+        elif period:
             ciq_call = f'CIQ("{ticker}","{mnemonic}","{period}")'
         else:
             ciq_call = f'CIQ("{ticker}","{mnemonic}")'
