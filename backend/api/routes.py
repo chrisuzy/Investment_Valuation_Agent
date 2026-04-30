@@ -795,6 +795,34 @@ async def fetch_from_file(
     elif sp_listing and sp_reporting is None:
         fx_rate_source = "unavailable (CIQ template missing stock_price_reporting)"
 
+    # Geographic segments: run through the resolver (exact → alias → composite →
+    # weak default → unresolved). Each segment arrives with a SegmentResolution
+    # embedded. Frontend can show the raw data + resolver suggestion, and user
+    # can override via the segment-mapping UI.
+    from engine.segment_resolver import resolve_segments
+    from engine.data_dictionary import GeographicSegment, SegmentResolution, SegmentMember, MethodologyChoices
+    raw_geo = ciq_data.get("geo_segments") or []
+    geo_segments_input: list[GeographicSegment] = []
+    for s in resolve_segments(raw_geo, store):
+        r = s["resolution"]
+        geo_segments_input.append(GeographicSegment(
+            name=s["name"],
+            revenue=s["revenue"],
+            pct=s.get("pct"),
+            resolution=SegmentResolution(
+                raw_name=r["raw_name"],
+                mapped_to=r.get("mapped_to"),
+                mapped_kind=r.get("mapped_kind", "unresolved"),
+                erp=r.get("erp"),
+                members=[SegmentMember(**m) for m in (r.get("members") or [])],
+                confidence=r.get("confidence", 0.0),
+                source=r.get("source", "auto"),
+                note=r.get("note"),
+            ),
+        ))
+
+    methodology = MethodologyChoices(geographic_segments=geo_segments_input)
+
     inputs = CompanyValuationInput(
         ticker=ticker,
         company_name=company_name,
@@ -817,6 +845,7 @@ async def fetch_from_file(
         industry_data_global=industry_data_global,
         option_inputs=option_inputs,
         valuation_assumptions=ValuationAssumptions(),
+        methodology_choices=methodology,
     )
 
     if inputs.raw_financials:
@@ -855,6 +884,55 @@ def list_industries(region: str = "US"):
     """List all available Damodaran industries."""
     store = _get_damodaran_store()
     return {"industries": store.list_industries(region)}
+
+
+@router.get("/erp-catalog")
+def list_erp_catalog():
+    """Return every Damodaran country + region with its ERP, for the
+    geographic-segment manual-mapping dropdown on the frontend.
+
+    Shape:
+      {
+        countries: [{name, total_erp, base_erp, crp}, ...],    # 180 entries
+        regions:   [{name, total_erp}, ...],                   # 10 entries
+      }
+    """
+    import json
+    from pathlib import Path
+    store = _get_damodaran_store()
+
+    countries = []
+    for name, raw in (store._country_risk or {}).items():
+        if name.startswith("__") or not isinstance(raw, dict):
+            continue
+        base = raw.get("equity_risk_premium")
+        crp = raw.get("country_risk_premium") or 0
+        if base is None:
+            continue
+        countries.append({
+            "name": name,
+            "base_erp": base,
+            "crp": crp,
+            "total_erp": base + crp,
+        })
+    countries.sort(key=lambda c: c["name"])
+
+    # Regions from cost_of_capital_reference.json
+    ref_path = Path(__file__).resolve().parent.parent / "data_sources" / "cost_of_capital_reference.json"
+    regions = []
+    if ref_path.exists():
+        with ref_path.open() as f:
+            ref = json.load(f)
+        for region_name, data in (ref.get("regional_erp") or {}).items():
+            if region_name == "description" or not isinstance(data, dict):
+                continue
+            erp = data.get("total_erp")
+            if erp is None:
+                continue
+            regions.append({"name": region_name, "total_erp": erp})
+        regions.sort(key=lambda r: r["name"])
+
+    return {"countries": countries, "regions": regions}
 
 
 @router.post("/valuation")

@@ -11,6 +11,7 @@ import type {
 } from '../types/valuation';
 import type { PatchValue } from '../api/client';
 import { ciq, damodaran, country as countrySrc, formula, user, tooltipFor, backendField } from '../lib/sources';
+import GeographicSegmentsPanel from '../components/GeographicSegmentsPanel';
 
 function fmtPct(v: number | null | undefined, decimals = 2): string {
   if (v === null || v === undefined) return '—';
@@ -593,6 +594,9 @@ export default function CostOfCapital({ data, onPatch }: Props) {
           </div>
         </div>
       </Section>
+
+      {/* ─── GEOGRAPHIC REVENUE MIX ─── */}
+      <GeographicSegmentsPanel data={data} onPatch={onPatch} />
 
       {/* ─── INDUSTRY REFERENCE ─── */}
       <Section title="Industry Reference" subtitle={`Damodaran ${ind.region} industry averages for "${ind.industry_name}".`}>

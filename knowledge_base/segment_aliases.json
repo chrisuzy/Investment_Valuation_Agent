@@ -1,0 +1,235 @@
+{
+  "_meta": {
+    "description": "Seed mapping from common CIQ geographic-segment labels to Damodaran country or region names. Users can extend this file; edits persist across backend restarts.",
+    "vintage": "2026-04-30",
+    "confidence_scale": "1.0 = exact country match; 0.9 = common alias; 0.7 = broad-region composite with defensible default weights; 0.3 = catch-all with weak signal (Rest of World → Global avg)"
+  },
+
+  "exact_country_aliases": {
+    "usa": "United States",
+    "u.s.": "United States",
+    "u.s.a.": "United States",
+    "america": "United States",
+    "americas": null,
+
+    "uk": "United Kingdom",
+    "u.k.": "United Kingdom",
+    "britain": "United Kingdom",
+    "great britain": "United Kingdom",
+
+    "mainland china": "China",
+    "prc": "China",
+    "people's republic of china": "China",
+
+    "hong kong": "Hong Kong",
+    "hk": "Hong Kong",
+
+    "south korea": "Korea",
+    "republic of korea": "Korea",
+    "korea, south": "Korea",
+    "north korea": null,
+
+    "taiwan, province of china": "Taiwan",
+
+    "russian federation": "Russia",
+    "viet nam": "Vietnam",
+    "syrian arab republic": "Syria",
+    "iran, islamic republic of": "Iran",
+    "venezuela, bolivarian republic of": "Venezuela",
+    "lao people's democratic republic": "Laos",
+    "myanmar": "Myanmar",
+    "burma": "Myanmar",
+    "united republic of tanzania": "Tanzania",
+    "republic of moldova": "Moldova",
+    "côte d'ivoire": "Ivory Coast",
+    "cote d'ivoire": "Ivory Coast",
+    "cabo verde": "Cape Verde",
+    "state of palestine": "Palestine",
+
+    "czechia": "Czech Republic",
+    "slovak republic": "Slovakia",
+    "macedonia": "North Macedonia",
+
+    "uae": "United Arab Emirates",
+    "u.a.e.": "United Arab Emirates",
+
+    "rsa": "South Africa",
+    "south africa": "South Africa"
+  },
+
+  "composite_definitions": {
+    "emea": {
+      "label": "Europe, Middle East & Africa",
+      "composition": [
+        {"to": "Western Europe", "kind": "region", "weight": 0.55},
+        {"to": "Eastern Europe", "kind": "region", "weight": 0.10},
+        {"to": "Middle East",    "kind": "region", "weight": 0.15},
+        {"to": "Africa",         "kind": "region", "weight": 0.20}
+      ],
+      "confidence": 0.70,
+      "note": "Default GDP-weighted. Adjust if company's EMEA mix is concentrated."
+    },
+    "europe-middle east-africa": { "alias_of": "emea" },
+    "europe, middle east and africa": { "alias_of": "emea" },
+    "europe, middle east & africa": { "alias_of": "emea" },
+
+    "americas": {
+      "label": "Americas",
+      "composition": [
+        {"to": "North America",              "kind": "region", "weight": 0.70},
+        {"to": "Central and South America",  "kind": "region", "weight": 0.28},
+        {"to": "Caribbean",                  "kind": "region", "weight": 0.02}
+      ],
+      "confidence": 0.75
+    },
+    "americas (ag)": { "alias_of": "americas" },
+    "the americas": { "alias_of": "americas" },
+    "north and south america": { "alias_of": "americas" },
+
+    "asia pacific": {
+      "label": "Asia Pacific",
+      "composition": [
+        {"to": "China",                    "kind": "country", "weight": 0.45},
+        {"to": "Japan",                    "kind": "country", "weight": 0.15},
+        {"to": "Korea",                    "kind": "country", "weight": 0.08},
+        {"to": "India",                    "kind": "country", "weight": 0.12},
+        {"to": "Australia & New Zealand",  "kind": "region",  "weight": 0.07},
+        {"to": "Asia",                     "kind": "region",  "weight": 0.13}
+      ],
+      "confidence": 0.60
+    },
+    "apac": { "alias_of": "asia pacific" },
+    "asia-pacific": { "alias_of": "asia pacific" },
+    "asia/pacific": { "alias_of": "asia pacific" },
+
+    "asia pacific (ap)": {
+      "label": "Asia Pacific (ex-China — Lenovo convention)",
+      "composition": [
+        {"to": "Japan",                    "kind": "country", "weight": 0.30},
+        {"to": "Korea",                    "kind": "country", "weight": 0.15},
+        {"to": "India",                    "kind": "country", "weight": 0.20},
+        {"to": "Australia & New Zealand",  "kind": "region",  "weight": 0.12},
+        {"to": "Asia",                     "kind": "region",  "weight": 0.23}
+      ],
+      "confidence": 0.50,
+      "note": "Some companies (e.g. Lenovo) report 'Asia Pacific' separately from China — then AP excludes China."
+    },
+    "apac ex-china": { "alias_of": "asia pacific (ap)" },
+    "asia pacific ex-china": { "alias_of": "asia pacific (ap)" },
+    "asia-pacific ex-china": { "alias_of": "asia pacific (ap)" },
+
+    "latin america": {
+      "label": "Latin America",
+      "composition": [
+        {"to": "Central and South America", "kind": "region", "weight": 0.90},
+        {"to": "Caribbean",                 "kind": "region", "weight": 0.10}
+      ],
+      "confidence": 0.85
+    },
+    "latam": { "alias_of": "latin america" },
+    "latin america & caribbean": { "alias_of": "latin america" },
+
+    "greater china": {
+      "label": "Greater China",
+      "composition": [
+        {"to": "China",     "kind": "country", "weight": 0.88},
+        {"to": "Hong Kong", "kind": "country", "weight": 0.08},
+        {"to": "Taiwan",    "kind": "country", "weight": 0.04}
+      ],
+      "confidence": 0.90
+    },
+
+    "europe": {
+      "label": "Europe (generic)",
+      "composition": [
+        {"to": "Western Europe", "kind": "region", "weight": 0.85},
+        {"to": "Eastern Europe", "kind": "region", "weight": 0.15}
+      ],
+      "confidence": 0.80
+    },
+    "european union": { "alias_of": "europe" },
+    "eu": { "alias_of": "europe" },
+
+    "north america": {
+      "label": "North America",
+      "composition": [
+        {"to": "United States", "kind": "country", "weight": 0.85},
+        {"to": "Canada",        "kind": "country", "weight": 0.12},
+        {"to": "Mexico",        "kind": "country", "weight": 0.03}
+      ],
+      "confidence": 0.85
+    },
+    "us & canada": { "alias_of": "north america" },
+    "u.s. & canada": { "alias_of": "north america" },
+
+    "asean": {
+      "label": "ASEAN",
+      "composition": [
+        {"to": "Singapore",   "kind": "country", "weight": 0.25},
+        {"to": "Indonesia",   "kind": "country", "weight": 0.20},
+        {"to": "Thailand",    "kind": "country", "weight": 0.15},
+        {"to": "Philippines", "kind": "country", "weight": 0.12},
+        {"to": "Vietnam",     "kind": "country", "weight": 0.12},
+        {"to": "Malaysia",    "kind": "country", "weight": 0.16}
+      ],
+      "confidence": 0.85
+    },
+
+    "mena": {
+      "label": "Middle East & North Africa",
+      "composition": [
+        {"to": "Middle East", "kind": "region", "weight": 0.70},
+        {"to": "Africa",      "kind": "region", "weight": 0.30}
+      ],
+      "confidence": 0.70
+    },
+    "middle east and africa": { "alias_of": "mena" },
+    "middle east & africa": { "alias_of": "mena" },
+
+    "nordics": {
+      "label": "Nordic countries",
+      "composition": [
+        {"to": "Sweden",   "kind": "country", "weight": 0.40},
+        {"to": "Norway",   "kind": "country", "weight": 0.22},
+        {"to": "Denmark",  "kind": "country", "weight": 0.22},
+        {"to": "Finland",  "kind": "country", "weight": 0.15},
+        {"to": "Iceland",  "kind": "country", "weight": 0.01}
+      ],
+      "confidence": 0.85
+    },
+
+    "dach": {
+      "label": "DACH (Germany, Austria, Switzerland)",
+      "composition": [
+        {"to": "Germany",     "kind": "country", "weight": 0.75},
+        {"to": "Switzerland", "kind": "country", "weight": 0.18},
+        {"to": "Austria",     "kind": "country", "weight": 0.07}
+      ],
+      "confidence": 0.90
+    }
+  },
+
+  "weak_defaults": {
+    "rest of world": {
+      "to": "Global",
+      "kind": "region",
+      "confidence": 0.30,
+      "note": "Global average ERP — analyst should refine based on company's actual geographic mix."
+    },
+    "row": { "alias_of": "rest of world" },
+    "international": {
+      "to": "Global",
+      "kind": "region",
+      "confidence": 0.30,
+      "note": "Defaults to Global average; often means 'everywhere except home country' for this firm."
+    },
+    "other": {
+      "to": null,
+      "confidence": 0.0,
+      "note": "Action: prompt_user"
+    },
+    "other countries": { "alias_of": "other" },
+    "worldwide": { "alias_of": "rest of world" },
+    "all other": { "alias_of": "other" }
+  }
+}

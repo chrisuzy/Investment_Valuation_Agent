@@ -199,10 +199,32 @@ class BusinessSegment(BaseModel):
     revenue: float = Field(default=0.0, description="Segment revenue in reporting currency units")
 
 
+class SegmentMember(BaseModel):
+    """One country or region inside a composite segment decomposition."""
+    to: str = Field(description="Damodaran country or region name")
+    kind: str = Field(default="country", description="'country' | 'region'")
+    weight: float = Field(default=0.0, description="Weight within the composite (0..1)")
+    erp: float | None = Field(default=None, description="Resolved ERP for this member")
+
+
+class SegmentResolution(BaseModel):
+    """How a raw CIQ segment name was mapped to Damodaran's risk dataset."""
+    raw_name: str
+    mapped_to: str | None = Field(default=None, description="Canonical country/region, or None if unresolved")
+    mapped_kind: str = Field(default="unresolved", description="'country' | 'region' | 'composite' | 'unresolved'")
+    erp: float | None = Field(default=None, description="Blended ERP for this segment")
+    members: list[SegmentMember] = Field(default_factory=list, description="Non-empty for composites")
+    confidence: float = Field(default=0.0, description="0..1 — 1.0 = exact, 0.3 = weak default")
+    source: str = Field(default="auto", description="'exact_country' | 'alias' | 'composite' | 'weak_default' | 'unresolved' | 'user'")
+    note: str | None = Field(default=None)
+
+
 class GeographicSegment(BaseModel):
     """One country/region revenue share for multi-country ERP calculation."""
     name: str = Field(description="Country or region label")
     revenue: float = Field(default=0.0, description="Revenue earned in this location")
+    pct: float | None = Field(default=None, description="Percentage of total segment revenue")
+    resolution: SegmentResolution | None = Field(default=None, description="Auto-resolved mapping to Damodaran")
 
 
 class ConvertibleDebt(BaseModel):

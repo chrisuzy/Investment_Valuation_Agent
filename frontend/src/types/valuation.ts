@@ -130,9 +130,29 @@ export interface BusinessSegment {
   revenue: number;
 }
 
+export interface SegmentMember {
+  to: string;
+  kind: string;   // "country" | "region"
+  weight: number;
+  erp: number | null;
+}
+
+export interface SegmentResolution {
+  raw_name: string;
+  mapped_to: string | null;
+  mapped_kind: string;    // "country" | "region" | "composite" | "unresolved"
+  erp: number | null;
+  members: SegmentMember[];
+  confidence: number;
+  source: string;
+  note: string | null;
+}
+
 export interface GeographicSegment {
   name: string;
   revenue: number;
+  pct?: number | null;
+  resolution?: SegmentResolution | null;
 }
 
 export interface ConvertibleDebt {

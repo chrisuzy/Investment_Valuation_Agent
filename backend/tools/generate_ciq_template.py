@@ -32,6 +32,8 @@ from data_sources.capiq_formula_map import (
     OPTION_FIELDS,
     LEASE_COMMITMENT_FIELDS,
     PERIOD_DATE_FIELDS,
+    GEO_SEGMENT_FIELDS,
+    GEO_SEGMENT_RANKS,
 )
 
 
@@ -224,6 +226,46 @@ def generate_template(default_ticker: str = "NVDA") -> Path:
     add_section("PERIOD DATES")
     add_formula_row("period_date_annual", "IQ_PERIODDATE", "IQ_FY-0", "Most recent 10-K period end date")
     add_formula_row("period_date_quarterly", "IQ_PERIODDATE", "IQ_FQ-0", "Most recent 10-Q period end date")
+
+    # ── Geographic Segments ───────────────────────────────────
+    # Uses the IQ_GEO_SEG_NAME_ABS / IQ_GEO_SEG_REV_ABS mnemonic family with
+    # the rank as the 9th argument. "_ABS" sorts by revenue descending, so
+    # rank 1 = largest geographic segment by revenue. Period = IQ_FY (latest).
+    #
+    # Formula template:
+    #   =CIQ($B$1, "IQ_GEO_SEG_NAME_ABS", "IQ_FY", , , , , , <rank>)
+    #
+    # The 9th-argument pattern requires 8 empty positional args before the
+    # rank. We handle this as a special case here rather than extending the
+    # generic add_formula_row helper.
+    add_section("GEOGRAPHIC REVENUE SEGMENTS (top 10 by revenue, latest FY)")
+    for rank in GEO_SEGMENT_RANKS:
+        for suffix, mnemonic, label_prefix in [
+            ("name", "IQ_GEO_SEG_NAME_ABS", "Segment name"),
+            ("rev",  "IQ_GEO_SEG_REV_ABS",  "Segment revenue"),
+        ]:
+            variable = f"geo_seg_{suffix}_{rank}"
+            # 9th positional arg — 7 commas after the period, then the rank
+            formula = f'=_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","IQ_FY",,,,,,{rank})'
+            ws.cell(row, 1, variable).border = THIN_BORDER
+            ws.cell(row, 2, f"rank {rank}").border = THIN_BORDER
+            cell_c = ws.cell(row, 3)
+            cell_c.value = formula
+            cell_c.border = THIN_BORDER
+            cell_c.font = Font(color="0000CC", size=10)
+            cell_d = ws.cell(row, 4)
+            cell_d.value = f"=C{row}"
+            cell_d.border = THIN_BORDER
+            if suffix == "rev":
+                cell_d.number_format = '#,##0.00'
+            ws.cell(row, 5, f"{label_prefix} (rank {rank})").border = THIN_BORDER
+            formula_rows.append({
+                "row": row,
+                "variable": variable,
+                "period": f"rank_{rank}",
+                "mnemonic": mnemonic,
+            })
+            row += 1
 
     # ── Metadata sheet: row map for the reader ─────────────────
     ws_meta = wb.create_sheet("_RowMap")

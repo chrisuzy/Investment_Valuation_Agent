@@ -72,6 +72,11 @@ def read_ciq_template(file_path: str | Path) -> dict:
         if variable in _EXPENSE_FIELDS and isinstance(value, (int, float)):
             value = abs(value)
 
+        # Geographic segments: period is like "rank_1", "rank_2" ... collect separately
+        if variable.startswith("geo_seg_"):
+            current.setdefault("_geo_seg_raw", {})[variable] = value
+            continue
+
         if variable.startswith("period_date_"):
             formatted = _format_date(raw_val)
             # Store by variable name, also by FY offset for per-year dates
@@ -109,12 +114,42 @@ def read_ciq_template(file_path: str | Path) -> dict:
             # Clean up the fallback key — downstream code doesn't need it
             data.pop("r_and_d_expense_fn", None)
 
+    # Post-process geographic segments into a clean list.
+    # Raw form: {"geo_seg_name_1": "China", "geo_seg_rev_1": 15901, ...}
+    # Clean form: [{"rank": 1, "name": "China", "revenue": 15901, "pct": 0.23}, ...]
+    # Filters zero-revenue rows and common corporate/unallocated label patterns.
+    _JUNK_LABELS = (
+        "headquarters", "corporate", "unallocated", "eliminations",
+        "inter-segment", "intersegment", "restructuring", "finance income",
+        "finance costs", "finance expense", "hq",
+    )
+    geo_segments = []
+    raw_geo = current.pop("_geo_seg_raw", {}) or {}
+    if raw_geo:
+        for rank in range(1, 11):
+            name = raw_geo.get(f"geo_seg_name_{rank}")
+            rev = raw_geo.get(f"geo_seg_rev_{rank}")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            if not isinstance(rev, (int, float)) or rev <= 0:
+                continue
+            low = name.lower()
+            if any(j in low for j in _JUNK_LABELS):
+                continue
+            geo_segments.append({"rank": rank, "name": name.strip(), "revenue": float(rev)})
+        # Compute percentage of total kept revenue
+        total_rev = sum(s["revenue"] for s in geo_segments)
+        if total_rev > 0:
+            for s in geo_segments:
+                s["pct"] = s["revenue"] / total_rev
+
     return {
         "ticker": ticker,
         "annual": annual,
         "quarterly": quarterly,
         "current": current,
         "period_dates": period_dates,
+        "geo_segments": geo_segments,
     }
 
 

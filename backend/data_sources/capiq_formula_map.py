@@ -113,6 +113,39 @@ PERIOD_DATE_FIELDS = [
 ]
 
 
+# ──────────────────────────────────────────────────────────────
+# Geographic Segment fields (top 10 by revenue, current fiscal year)
+#
+# CIQ mnemonic family:
+#   IQ_GEO_SEG_NAME_ABS  — nth geographic segment name (rank in 9th arg)
+#   IQ_GEO_SEG_REV_ABS   — nth geographic segment revenue
+#
+# "_ABS" suffix means absolute-sorted (largest first). 9th argument is the
+# rank (1..10). Period = IQ_FY returns latest fiscal year.
+#
+# Companies vary: some report 4 segments, some 10+. Slots 5-10 often come
+# back as zero-revenue corporate/unallocated labels; reader filters them.
+# ──────────────────────────────────────────────────────────────
+GEO_SEGMENT_RANKS = list(range(1, 11))
+
+GEO_SEGMENT_FIELDS: list[CIQField] = []
+for _rank in GEO_SEGMENT_RANKS:
+    GEO_SEGMENT_FIELDS.append(
+        CIQField(
+            f"geo_seg_name_{_rank}",
+            "IQ_GEO_SEG_NAME_ABS",
+            description=f"Geographic segment #{_rank} name",
+        )
+    )
+    GEO_SEGMENT_FIELDS.append(
+        CIQField(
+            f"geo_seg_rev_{_rank}",
+            "IQ_GEO_SEG_REV_ABS",
+            description=f"Geographic segment #{_rank} revenue",
+        )
+    )
+
+
 # All fields grouped for easy iteration
 ALL_FIELDS = (
     INCOME_STATEMENT_FIELDS
@@ -122,6 +155,7 @@ ALL_FIELDS = (
     + OPTION_FIELDS
     + LEASE_COMMITMENT_FIELDS
     + PERIOD_DATE_FIELDS
+    + GEO_SEGMENT_FIELDS
 )
 
 

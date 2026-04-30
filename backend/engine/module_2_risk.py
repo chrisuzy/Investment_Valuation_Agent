@@ -144,17 +144,38 @@ def _multi_location_weighted_erp(
 ) -> tuple[float, list[str]]:
     """Revenue-weighted ERP across countries or regions.
 
-    lookup(name) should return the ERP for that location, or None if not found.
+    Preferred path: each GeographicSegment carries a `resolution` with a
+    pre-computed ERP (handles composites like "EMEA" by expanding to member
+    weights). Backend routes.py populates this automatically from the
+    segment_resolver; frontend user overrides propagate through the same
+    resolution object.
+
+    Fallback path: if `resolution` is absent (pre-resolver data), fall back
+    to calling `lookup(seg.name)` — the legacy behavior.
+
+    lookup(name) → ERP | None.
     """
     warnings: list[str] = []
     weighted: list[tuple[float, float]] = []
     total_rev = 0.0
     for seg in segments:
-        erp = lookup(seg.name)
-        if erp is None:
+        # Prefer the resolved ERP if available
+        resolved_erp = None
+        if getattr(seg, "resolution", None) is not None:
+            resolved_erp = seg.resolution.erp
+            if seg.resolution.mapped_kind == "unresolved":
+                warnings.append(
+                    f"Segment '{seg.name}' ({(seg.pct or 0)*100:.1f}%): unresolved — "
+                    f"please map manually via the Geographic Segments panel."
+                )
+                continue
+        if resolved_erp is None:
+            # Legacy path — caller-supplied lookup by raw name
+            resolved_erp = lookup(seg.name)
+        if resolved_erp is None:
             warnings.append(f"Location '{seg.name}': ERP not found; skipped.")
             continue
-        weighted.append((seg.revenue, erp))
+        weighted.append((seg.revenue, resolved_erp))
         total_rev += seg.revenue
     if total_rev <= 0 or not weighted:
         return (0.0, warnings + ["Multi-location ERP failed: no valid locations."])
