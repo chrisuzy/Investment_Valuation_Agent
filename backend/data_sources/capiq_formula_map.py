@@ -62,13 +62,14 @@ BALANCE_SHEET_FIELDS = [
 MARKET_FIELDS = [
     CIQField("stock_price",            "IQ_CLOSEPRICE",      description="Closing Stock Price (listing currency)"),
     CIQField("mv_equity",              "IQ_MARKETCAP",       description="Market Capitalization (listing currency)"),
-    # Reporting-currency variants — CIQ's 5th argument <FILING> returns values
-    # converted to the filing/reporting currency. Used to derive the FX rate
-    # and to feed WACC math (which requires everything in reporting currency).
+    # Reporting-currency variants — CIQ's 4th argument "REPORTED" converts the
+    # market-data value to the company's filing currency. The 4th-arg scope token
+    # is the universal S&P syntax (verified working against the live plugin).
+    # "TRADED" (or blank) = trading/listing currency; "REPORTED" = filing currency.
     CIQField("stock_price_reporting",  "IQ_CLOSEPRICE", description="Closing Stock Price (reporting currency)",
-             currency_override="<FILING>"),
+             currency_override="REPORTED"),
     CIQField("mv_equity_reporting",    "IQ_MARKETCAP",  description="Market Capitalization (reporting currency)",
-             currency_override="<FILING>"),
+             currency_override="REPORTED"),
     CIQField("reporting_currency",     "IQ_FILING_CURRENCY", description="Filing/Reporting Currency"),
     CIQField("primary_exchange",       "IQ_EXCHANGE",        description="Primary Exchange Listing"),
     CIQField("effective_tax_rate_ciq", "IQ_EFFECT_TAX_RATE", description="Effective Tax Rate (CIQ, in %)"),
@@ -159,12 +160,14 @@ def generate_ciq_formulas(
     }
 
     def _make_formula(var_name: str, mnemonic: str, period: str | None) -> str:
-        # CIQ signature: =CIQ(identifier, mnemonic, [period], [date], [currency])
-        # Currency override goes in position 5. Fill empty period/date as "".
+        # CIQ signature: =CIQ(identifier, mnemonic, [period_or_date], [currency_scope])
+        # The 4th argument is the currency scope: "TRADED" (default, trading
+        # currency) or "REPORTED" (filing/reporting currency). Verified against
+        # the live S&P Capital IQ Excel plugin.
         ccy = _CCY_OVERRIDES.get(var_name)
         if ccy:
             per = period or ""
-            ciq_call = f'CIQ("{ticker}","{mnemonic}","{per}","","{ccy}")'
+            ciq_call = f'CIQ("{ticker}","{mnemonic}","{per}","{ccy}")'
         elif period:
             ciq_call = f'CIQ("{ticker}","{mnemonic}","{period}")'
         else:

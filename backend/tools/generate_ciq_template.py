@@ -82,20 +82,10 @@ def generate_template(default_ticker: str = "NVDA") -> Path:
     ws["B2"] = "1) Enter ticker in B1  2) Wait for #GETTING_DATA to disappear  3) Save (Ctrl+S)  4) Load in app"
     ws["B2"].font = Font(italic=True, color="444444")
 
-    # ── Row 3: Filing-currency helper ──────────────────────────
-    # Resolves to the company's filing currency ISO code (e.g., "USD" for Lenovo,
-    # "CNY" for BABA). Referenced by every _reporting formula below as the 5th
-    # CIQ argument. This is universal — works for any ticker in $B$1 without
-    # hardcoding any specific currency.
-    ws["A3"] = "Filing currency (helper):"
-    ws["A3"].font = Font(italic=True, size=10, color="666666")
-    ws["C3"] = '=_xll.ciqfunctions.udf.CIQ($B$1,"IQ_FILING_CURRENCY")'
-    ws["C3"].font = Font(color="0000CC", size=10)
-    ws["D3"] = "=C3"
-    ws["D3"].font = Font(bold=True)
-    ws["E3"] = "ISO 4217 code (e.g. USD, HKD, CNY). Referenced by _reporting formulas."
-    ws["E3"].font = Font(italic=True, size=10, color="666666")
-    FILING_CCY_CELL = "$D$3"   # referenced by _reporting formulas as 5th arg
+    # ── Row 3: unused helper spacer (filing-currency helper removed) ──
+    # Earlier attempt used a cell-reference approach; the actual S&P syntax
+    # is a literal "REPORTED" token in the 4th CIQ argument, so no helper
+    # cell is needed. Keeping row 3 as a blank spacer for visual separation.
 
     row = 4
 
@@ -133,22 +123,18 @@ def generate_template(default_ticker: str = "NVDA") -> Path:
 
     def add_formula_row(variable: str, mnemonic: str, period: str, description: str):
         nonlocal row
-        # Build formula referencing $B$1 as ticker
-        # Use the full XLL path so CIQ plugin resolves both via COM and manual open.
-        # CIQ signature: CIQ(identifier, mnemonic, [period], [date], [currency])
+        # Build formula referencing $B$1 as ticker.
+        # CIQ signature: CIQ(identifier, mnemonic, [period_or_date], [currency_scope])
+        # The 4th argument is the currency scope: "TRADED" (default) for trading
+        # currency, "REPORTED" for filing/reporting currency. This is the universal
+        # S&P Capital IQ syntax, verified against the live plugin.
         ccy = _CCY_OVERRIDES.get(variable)
         if ccy:
-            # For the "<FILING>" sentinel, we reference a cell at the top of the
-            # sheet that resolves to the filing currency ISO code (e.g., "USD").
-            # Every CIQ plugin version accepts a plain ISO code as the 5th arg;
-            # the "<FILING>" magic token is not universally supported, but a
-            # cell reference to a resolved currency string is.
-            ccy_arg = FILING_CCY_CELL if ccy == "<FILING>" else f'"{ccy}"'
-            # Emit all 5 args. Empty "" for period/date when period == "current"
+            # Currency override lives in position 4. Pass "" for period when current.
             if period == "current":
-                ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","","",{ccy_arg})'
+                ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","","{ccy}")'
             else:
-                ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","{period}","",{ccy_arg})'
+                ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","{period}","{ccy}")'
         elif period == "current":
             ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}")'
         else:
