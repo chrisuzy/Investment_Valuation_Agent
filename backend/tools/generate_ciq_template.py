@@ -82,7 +82,21 @@ def generate_template(default_ticker: str = "NVDA") -> Path:
     ws["B2"] = "1) Enter ticker in B1  2) Wait for #GETTING_DATA to disappear  3) Save (Ctrl+S)  4) Load in app"
     ws["B2"].font = Font(italic=True, color="444444")
 
-    # ── Row 3: blank separator ────────────────────────────────
+    # ── Row 3: Filing-currency helper ──────────────────────────
+    # Resolves to the company's filing currency ISO code (e.g., "USD" for Lenovo,
+    # "CNY" for BABA). Referenced by every _reporting formula below as the 5th
+    # CIQ argument. This is universal — works for any ticker in $B$1 without
+    # hardcoding any specific currency.
+    ws["A3"] = "Filing currency (helper):"
+    ws["A3"].font = Font(italic=True, size=10, color="666666")
+    ws["C3"] = '=_xll.ciqfunctions.udf.CIQ($B$1,"IQ_FILING_CURRENCY")'
+    ws["C3"].font = Font(color="0000CC", size=10)
+    ws["D3"] = "=C3"
+    ws["D3"].font = Font(bold=True)
+    ws["E3"] = "ISO 4217 code (e.g. USD, HKD, CNY). Referenced by _reporting formulas."
+    ws["E3"].font = Font(italic=True, size=10, color="666666")
+    FILING_CCY_CELL = "$D$3"   # referenced by _reporting formulas as 5th arg
+
     row = 4
 
     # ── Column headers ─────────────────────────────────────────
@@ -124,11 +138,17 @@ def generate_template(default_ticker: str = "NVDA") -> Path:
         # CIQ signature: CIQ(identifier, mnemonic, [period], [date], [currency])
         ccy = _CCY_OVERRIDES.get(variable)
         if ccy:
+            # For the "<FILING>" sentinel, we reference a cell at the top of the
+            # sheet that resolves to the filing currency ISO code (e.g., "USD").
+            # Every CIQ plugin version accepts a plain ISO code as the 5th arg;
+            # the "<FILING>" magic token is not universally supported, but a
+            # cell reference to a resolved currency string is.
+            ccy_arg = FILING_CCY_CELL if ccy == "<FILING>" else f'"{ccy}"'
             # Emit all 5 args. Empty "" for period/date when period == "current"
             if period == "current":
-                ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","","","{ccy}")'
+                ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","","",{ccy_arg})'
             else:
-                ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","{period}","","{ccy}")'
+                ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","{period}","",{ccy_arg})'
         elif period == "current":
             ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}")'
         else:
