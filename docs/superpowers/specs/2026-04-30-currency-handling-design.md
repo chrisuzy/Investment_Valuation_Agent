@@ -285,3 +285,109 @@ After implementation:
 2. **Visibility:** No bare number on any page; every monetary value has a currency suffix.
 3. **Universality:** Works for every ticker in the test set — MSFT (no conversion), Lenovo (HKD→USD), BABA (USD→CNY), TSLA (no conversion). Verified explicitly.
 4. **No regressions:** 83 tests still pass; other companies' outputs unchanged when currencies match.
+
+---
+
+# ADDENDUM: Universal unresolved-field fallback (2026-04-30)
+
+## Motivation
+
+Several data points our engine depends on can fail to auto-resolve:
+
+- **Industry** — ticker not in `indname.xlsx` + not in `supplemental_companies.json` (e.g., Alibaba parent was missing until manually added). Confirmed: indname is incomplete (filters out ADRs, many dual listings, some Chinese firms; ~10k-15k firms globally absent).
+- **Country** — CIQ `IQ_COUNTRY_HEADQUARTERS` blank or doesn't match Damodaran's country-risk sheet.
+- **Stock-price currency** — exchange prefix missing from `exchange_currency_map.py` (8.7% of indname firms).
+- **Effective tax rate** — `IQ_EFFECT_TAX_RATE` can return `#N/A` for firms with negative EBT.
+- **Shares outstanding / any other CIQ-sourced field** that happens to fail.
+
+Current behavior: silent defaults (e.g., industry → "Semiconductor" fallback, country → "United States"). Result: a wrong valuation looks correct.
+
+## Design: explicit unresolved-field list + interactive UI
+
+### Backend — new response field
+
+Add to `ValuationResponse`:
+
+```python
+class UnresolvedField(BaseModel):
+    path: str                                # dot-path, e.g. "industry_data.industry_name"
+    kind: Literal["enum","number","currency","country","percentage"]
+    reason: str                              # user-facing explanation
+    options: list[str] | None = None         # for kind=enum/currency/country
+    current_value: object | None = None      # what we defaulted to (may be None)
+    required: bool = True                    # does valuation math depend on it?
+    suggestion: object | None = None         # heuristic guess (e.g., industry-avg tax)
+```
+
+```python
+class ValuationResponse(BaseModel):
+    ...
+    unresolved_fields: list[UnresolvedField] = []
+```
+
+### Where backend populates
+
+In `routes.py`, after parsing CIQ + industry lookup + country lookup:
+
+| Check | Path | Kind | Options source |
+|---|---|---|---|
+| Industry lookup miss | `industry_data.industry_name` | enum | `store.list_industries("US")` (94) |
+| Country lookup miss | `country` | country | `store.list_countries()` (132) |
+| Exchange prefix miss | `stock_price_currency` | currency | ISO 4217 list (~180) |
+| Effective tax `None` | `effective_tax_rate_ciq` | percentage | — (user enters) |
+| Shares outstanding `None` | `raw_financials.0.shares_outstanding` | number | — |
+| Marginal tax not found | `macro_inputs.tax_rate_marginal` | percentage | — (suggest 25% default) |
+| FX rate unavailable | `fx_rate` | number | — (when currencies differ and reporting-price field is `#N/A`) |
+
+Each populates `unresolved_fields`; downstream code continues with the current-value default (so the page renders, just with the banner visible).
+
+### Frontend — Two new components
+
+**`UnresolvedFieldsBanner.tsx`** — top of every valuation page, visible only when `unresolved_fields.length > 0`.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ⚠ 3 fields need your input before this valuation is complete │
+│ ▸ Industry: not auto-detected (ticker missing from Damodaran)│
+│ ▸ Effective tax rate: CIQ returned #N/A                       │
+│ ▸ Stock-price currency: exchange prefix 'XYZE' unknown        │
+│ [Resolve now]                                                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**`ResolutionModal.tsx`** (or inline panel) — shows each unresolved field with:
+
+- `kind=enum / currency / country` → `<select>` with `options` list (searchable if >30 options)
+- `kind=number` → `<input type="number">`
+- `kind=percentage` → `<input>` with "%" suffix; converts to decimal on submit
+
+On submit: batch PATCH all resolved fields → backend re-runs valuation → response arrives with (hopefully) empty `unresolved_fields` list.
+
+### Integration points
+
+- `UnresolvedFieldsBanner` goes on **every valuation page** so the user sees it no matter which tab they're on.
+- Existing pages aren't blocked from rendering; they just show an amber indicator + numbers computed with defaults.
+
+## Failure modes
+
+| Scenario | Behavior |
+|---|---|
+| User ignores the banner | Valuation continues with silent defaults (same as today) — but the user was told |
+| User submits invalid input (negative price, non-ISO currency) | Client-side validation; backend PATCH rejects with 400 |
+| Resolution reveals MORE unresolved fields (cascade) | Banner updates with the new list; user resolves iteratively |
+
+## Success criteria
+
+1. Upload a CIQ file for a ticker not in `indname.xlsx`: banner appears, industry dropdown offers 94 options, submission triggers re-valuation.
+2. Upload a CIQ file where `IQ_EFFECT_TAX_RATE = #N/A`: banner appears, numeric input accepts a value, backend re-runs.
+3. Upload a CIQ file for a company on an unmapped exchange (e.g., CPSE before Phase 0 fix): currency dropdown lets user pick DKK.
+4. Existing test companies (MSFT, BABA, TSLA, LENOVO) show empty `unresolved_fields` — no regression.
+
+---
+
+## Execution order
+
+- **Phase 0** (1 min): Add CPSE → DKK mapping.
+- **Phase 1** (bulk of work): Currency handling per main spec above.
+- **Phase 2** (this addendum): Unresolved-field fallback.
+
