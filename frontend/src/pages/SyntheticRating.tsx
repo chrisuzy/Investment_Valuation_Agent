@@ -2,6 +2,7 @@ import type { ValuationResponse } from '../types/valuation';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
+import { ciq, formula, backendField } from '../lib/sources';
 
 // Interest coverage → rating lookup table (Damodaran small-firm)
 const RATING_TABLE = [
@@ -37,23 +38,29 @@ export default function SyntheticRating({ data, sessionId }: { data: ValuationRe
         <tbody>
           <tr>
             <SpreadsheetCell type="label" value="EBIT (adjusted)" />
-            <SpreadsheetCell type="calc" value={ebit} />
+            <SpreadsheetCell type="calc" value={ebit}
+              tooltip={backendField('adjusted.adjusted_ebit', 'Raw EBIT + R&D current − Amortization + Lease adj. Source for coverage ratio calc.')} />
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="Interest expense" />
-            <SpreadsheetCell type="financial" value={interest} />
+            <SpreadsheetCell type="financial" value={interest}
+              tooltip={ciq(data.inputs.ticker, 'IQ_INTEREST_EXP', 'LTM')} />
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="Interest coverage ratio" bold />
-            <SpreadsheetCell type="calc" value={coverage.toFixed(2)} bold />
+            <SpreadsheetCell type="calc" value={coverage.toFixed(2)} bold
+              tooltip={formula('Coverage = Adjusted EBIT / Interest expense',
+                               `${ebit.toLocaleString(undefined,{maximumFractionDigits:0})} / ${interest.toLocaleString(undefined,{maximumFractionDigits:0})} = ${coverage.toFixed(2)}`)} />
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="Estimated bond rating" bold />
-            <SpreadsheetCell type="calc" value={match?.rating ?? 'N/A'} bold />
+            <SpreadsheetCell type="calc" value={match?.rating ?? 'N/A'} bold
+              tooltip="Coverage → rating via lookup table below (Damodaran small-firm). Ginzu cost_of_capital_reference.json has both 'large' and 'small' versions." />
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="Estimated default spread" bold />
-            <SpreadsheetCell type="calc" value={match?.spread ?? 0} bold />
+            <SpreadsheetCell type="calc" value={match?.spread ?? 0} bold
+              tooltip="Spread above risk-free rate at the inferred rating. Kd_pretax = RF + spread." />
           </tr>
         </tbody>
       </SpreadsheetGrid>
@@ -70,10 +77,14 @@ export default function SyntheticRating({ data, sessionId }: { data: ValuationRe
         <tbody>
           {RATING_TABLE.map((r, i) => (
             <tr key={i} className={match === r ? 'ring-2 ring-blue-500' : ''}>
-              <SpreadsheetCell type="reference" value={r.minCoverage < 0 ? '< 0.5' : r.minCoverage.toFixed(1)} />
-              <SpreadsheetCell type="reference" value={r.maxCoverage >= 100 ? '> 12.5' : r.maxCoverage.toFixed(1)} />
-              <SpreadsheetCell type="reference" value={r.rating} align="left" />
-              <SpreadsheetCell type="reference" value={r.spread} />
+              <SpreadsheetCell type="reference" value={r.minCoverage < 0 ? '< 0.5' : r.minCoverage.toFixed(1)}
+                tooltip={`Lower bound of coverage bucket for rating ${r.rating}`} />
+              <SpreadsheetCell type="reference" value={r.maxCoverage >= 100 ? '> 12.5' : r.maxCoverage.toFixed(1)}
+                tooltip={`Upper bound of coverage bucket for rating ${r.rating}`} />
+              <SpreadsheetCell type="reference" value={r.rating} align="left"
+                tooltip={`Moody's / S&P composite rating assigned when coverage ∈ [${r.minCoverage}, ${r.maxCoverage})`} />
+              <SpreadsheetCell type="reference" value={r.spread}
+                tooltip={`Default spread (over RF) for rating ${r.rating}. Source: Damodaran synthetic rating table (Jan 2026), cost_of_capital_reference.json`} />
             </tr>
           ))}
         </tbody>

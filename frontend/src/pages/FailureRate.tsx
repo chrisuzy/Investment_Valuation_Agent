@@ -2,6 +2,7 @@ import type { ValuationResponse } from '../types/valuation';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
+import { user, formula, backendField } from '../lib/sources';
 
 // Cumulative default rates by rating (10-year)
 const DEFAULT_RATES = [
@@ -35,11 +36,18 @@ export default function FailureRate({ data, sessionId }: { data: ValuationRespon
         <tbody>
           <tr>
             <SpreadsheetCell type="label" value="Probability of failure" />
-            <SpreadsheetCell type="hypothesis" value={failProb} editable />
+            <SpreadsheetCell type="hypothesis" value={failProb} editable
+              tooltip={user('Probability of failure over the DCF horizon', 'Default = 0%. Analyst sets based on bond rating, cash-burn runway, or distress flags. See cumulative default rates below for rating-based benchmarks.')} />
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="Proceeds as % of book value if failure" />
-            <SpreadsheetCell type="hypothesis" value={proceedsPct} editable />
+            <SpreadsheetCell type="hypothesis" value={proceedsPct} editable
+              tooltip={user('Distress sale proceeds fraction', 'Default 50%. Liquidation recovery rate on assets in failure. 0% if you believe assets will be worthless.')} />
+          </tr>
+          <tr>
+            <SpreadsheetCell type="label" value="Failure tie-to (Book value / fair Value)" />
+            <SpreadsheetCell type="hypothesis" value={data.inputs.valuation_assumptions.failure_tie_to} editable
+              tooltip={user('What to tie failure proceeds to', '"B" = book value of capital; "V" = estimated fair value. Default V.')} />
           </tr>
         </tbody>
       </SpreadsheetGrid>
@@ -48,19 +56,24 @@ export default function FailureRate({ data, sessionId }: { data: ValuationRespon
         <tbody>
           <tr>
             <SpreadsheetCell type="label" value="Value of operating assets (going concern)" />
-            <SpreadsheetCell type="calc" value={opAssets} />
+            <SpreadsheetCell type="calc" value={opAssets}
+              tooltip={backendField('dcf.value_of_operating_assets', 'Σ PV(FCFF) + PV(Terminal Value) before failure overlay')} />
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="Probability of failure" />
-            <SpreadsheetCell type="calc" value={failProb} />
+            <SpreadsheetCell type="calc" value={failProb}
+              tooltip="Echoed from Failure Probability Inputs above" />
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="Distress sale proceeds" />
-            <SpreadsheetCell type="calc" value={opAssets * proceedsPct} />
+            <SpreadsheetCell type="calc" value={opAssets * proceedsPct}
+              tooltip={formula('Proceeds = V_op × distress_proceeds_pct',
+                               `${opAssets.toLocaleString('en-US',{maximumFractionDigits:0})} × ${(proceedsPct*100).toFixed(0)}% = ${(opAssets*proceedsPct).toLocaleString('en-US',{maximumFractionDigits:0})}`)} />
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="Expected operating asset value" bold />
-            <SpreadsheetCell type="calc" value={opAssets * (1 - failProb) + opAssets * proceedsPct * failProb} bold />
+            <SpreadsheetCell type="calc" value={opAssets * (1 - failProb) + opAssets * proceedsPct * failProb} bold
+              tooltip={formula('V_expected = V_op × (1 − p_fail) + Proceeds × p_fail', 'Probability-weighted blend of going-concern + distress scenarios.')} />
           </tr>
         </tbody>
       </SpreadsheetGrid>
@@ -77,10 +90,14 @@ export default function FailureRate({ data, sessionId }: { data: ValuationRespon
         <tbody>
           {DEFAULT_RATES.map((r, i) => (
             <tr key={i}>
-              <SpreadsheetCell type="reference" value={r.rating} align="left" />
-              <SpreadsheetCell type="reference" value={r.prob1} />
-              <SpreadsheetCell type="reference" value={r.prob5} />
-              <SpreadsheetCell type="reference" value={r.prob10} />
+              <SpreadsheetCell type="reference" value={r.rating} align="left"
+                tooltip="Moody's / S&P composite rating" />
+              <SpreadsheetCell type="reference" value={r.prob1}
+                tooltip={`1-year cumulative default probability for ${r.rating} (Damodaran failure rate worksheet, 2025 update)`} />
+              <SpreadsheetCell type="reference" value={r.prob5}
+                tooltip={`5-year cumulative default probability for ${r.rating} — multi-year projection of 1-yr rate`} />
+              <SpreadsheetCell type="reference" value={r.prob10}
+                tooltip={`10-year cumulative default probability for ${r.rating} — typical choice for DCF horizon`} />
             </tr>
           ))}
         </tbody>

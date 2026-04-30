@@ -2,10 +2,12 @@ import type { ValuationResponse } from '../types/valuation';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
+import { ciq, formula, backendField, user } from '../lib/sources';
 
 export default function RDConverter({ data, sessionId }: { data: ValuationResponse; sessionId?: string | null }) {
   const adj = data.inputs.adjustment_inputs;
   const adjusted = data.adjusted;
+  const ticker = data.inputs.ticker;
 
   const n = adj.amortization_period_n;
   const currentRD = adj.r_and_d_expense_current;
@@ -54,17 +56,20 @@ export default function RDConverter({ data, sessionId }: { data: ValuationRespon
         <tbody>
           <tr>
             <SpreadsheetCell value="Current Year" type="label" />
-            <SpreadsheetCell value={currentRD} type="hypothesis" />
+            <SpreadsheetCell value={currentRD} type="hypothesis"
+              tooltip={ciq(ticker, "IQ_RD_EXP", "LTM") + " — sourced from LTM rotation (Module 1 passthrough from ltm.r_and_d_expense)"} />
           </tr>
           {pastRD.map((expense, i) => (
             <tr key={i}>
               <SpreadsheetCell value={`t-${i + 1}`} type="label" />
-              <SpreadsheetCell value={expense} type="hypothesis" />
+              <SpreadsheetCell value={expense} type="hypothesis"
+                tooltip={ciq(ticker, "IQ_RD_EXP", `IQ_FY-${i + 1}`)} />
             </tr>
           ))}
           <tr>
             <SpreadsheetCell value="Amortization Period (years)" type="label" bold />
-            <SpreadsheetCell value={n} type="hypothesis" />
+            <SpreadsheetCell value={n} type="hypothesis"
+              tooltip={user('R&D amortization period N', 'Damodaran industry default: Pharma/Biotech/Aerospace = 10y; Online Retail / Internet Software = 3y; all others = 5y.')} />
           </tr>
         </tbody>
       </SpreadsheetGrid>
@@ -83,21 +88,30 @@ export default function RDConverter({ data, sessionId }: { data: ValuationRespon
         <tbody>
           <tr>
             <SpreadsheetCell value="Current" type="label" />
-            <SpreadsheetCell value={currentRD} type="hypothesis" />
-            <SpreadsheetCell value="1.00" type="calc" />
-            <SpreadsheetCell value={currentRD} type="calc" />
+            <SpreadsheetCell value={currentRD} type="hypothesis"
+              tooltip={ciq(ticker, "IQ_RD_EXP", "LTM")} />
+            <SpreadsheetCell value="1.00" type="calc"
+              tooltip="Current-year R&D: 100% unamortized (no years have passed since spend)" />
+            <SpreadsheetCell value={currentRD} type="calc"
+              tooltip={formula("Unamortized = expense × fraction", `${currentRD.toLocaleString()} × 1.00`)} />
             <SpreadsheetCell value={null} type="label" />
           </tr>
           {scheduleRows.map((row, i) => (
             <tr key={i}>
               <SpreadsheetCell value={row.label} type="label" />
-              <SpreadsheetCell value={row.expense} type="hypothesis" />
+              <SpreadsheetCell value={row.expense} type="hypothesis"
+                tooltip={ciq(ticker, "IQ_RD_EXP", `IQ_FY-${i + 1}`)} />
               <SpreadsheetCell
                 value={row.unamortizedFraction > 0 ? row.unamortizedFraction.toFixed(2) : '0.00'}
                 type="calc"
-              />
-              <SpreadsheetCell value={row.unamortizedAmount} type="calc" />
-              <SpreadsheetCell value={row.amortizationThisYear} type="calc" />
+                tooltip={formula("Unamortized fraction = max(0, (N − t) / N)",
+                                 `(${n} − ${i + 1}) / ${n} = ${row.unamortizedFraction.toFixed(4)}`)} />
+              <SpreadsheetCell value={row.unamortizedAmount} type="calc"
+                tooltip={formula("= expense × fraction",
+                                 `${row.expense.toLocaleString()} × ${row.unamortizedFraction.toFixed(2)} = ${row.unamortizedAmount.toLocaleString(undefined,{maximumFractionDigits:0})}`)} />
+              <SpreadsheetCell value={row.amortizationThisYear} type="calc"
+                tooltip={formula("Straight-line annual amortization = expense / N",
+                                 row.amortizationThisYear > 0 ? `${row.expense.toLocaleString()} / ${n} = ${row.amortizationThisYear.toLocaleString(undefined,{maximumFractionDigits:0})}` : `Year ${i+1} > N=${n}, fully amortized`)} />
             </tr>
           ))}
           {/* Totals row */}
@@ -105,8 +119,11 @@ export default function RDConverter({ data, sessionId }: { data: ValuationRespon
             <SpreadsheetCell value="Total" type="label" bold />
             <SpreadsheetCell value={null} type="label" />
             <SpreadsheetCell value={null} type="label" />
-            <SpreadsheetCell value={totalUnamortized + currentRD} type="calc" bold />
-            <SpreadsheetCell value={totalAmortization} type="calc" bold />
+            <SpreadsheetCell value={totalUnamortized + currentRD} type="calc" bold
+              tooltip={formula("Research asset = current R&D + Σ unamortized past R&D",
+                               "This is the capitalized value added to Invested Capital for ROIC calc")} />
+            <SpreadsheetCell value={totalAmortization} type="calc" bold
+              tooltip="Σ annual amortization across past years within the N-year window" />
           </tr>
         </tbody>
       </SpreadsheetGrid>
@@ -116,19 +133,24 @@ export default function RDConverter({ data, sessionId }: { data: ValuationRespon
         <tbody>
           <tr>
             <SpreadsheetCell value="Value of Research Asset" type="label" bold width="280px" />
-            <SpreadsheetCell value={adjusted?.value_of_research_asset} type="calc" width="200px" />
+            <SpreadsheetCell value={adjusted?.value_of_research_asset} type="calc" width="200px"
+              tooltip={backendField("adjusted.value_of_research_asset", "Current R&D + Σ unamortized past R&D. Added to Invested Capital.")} />
           </tr>
           <tr>
             <SpreadsheetCell value="Unamortized R&D" type="label" bold />
-            <SpreadsheetCell value={adjusted?.unamortized_r_and_d} type="calc" />
+            <SpreadsheetCell value={adjusted?.unamortized_r_and_d} type="calc"
+              tooltip={backendField("adjusted.unamortized_r_and_d", "Σ past R&D × (N−t)/N. Capital-asset component.")} />
           </tr>
           <tr>
             <SpreadsheetCell value="Amortization of R&D" type="label" bold />
-            <SpreadsheetCell value={adjusted?.amortization_r_and_d} type="calc" />
+            <SpreadsheetCell value={adjusted?.amortization_r_and_d} type="calc"
+              tooltip={backendField("adjusted.amortization_r_and_d", "Σ past R&D / N. Becomes D&A expense.")} />
           </tr>
           <tr>
             <SpreadsheetCell value="Adjusted EBIT" type="label" bold />
-            <SpreadsheetCell value={adjusted?.adjusted_ebit} type="calc" />
+            <SpreadsheetCell value={adjusted?.adjusted_ebit} type="calc"
+              tooltip={formula("Adjusted EBIT = Raw EBIT + R&D current − Amortization + Lease adj",
+                               "Recognizes R&D as capex. Positive adjustment when current R&D > amortization (growing R&D firms).")} />
           </tr>
           <tr>
             <SpreadsheetCell

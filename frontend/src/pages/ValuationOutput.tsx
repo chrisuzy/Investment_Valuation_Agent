@@ -2,6 +2,7 @@ import type { ValuationResponse } from '../types/valuation';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
+import { ciq, formula, backendField, user } from '../lib/sources';
 
 // ---------- helpers ----------
 
@@ -179,23 +180,32 @@ export default function ValuationOutput({ data, sessionId }: { data: ValuationRe
   // ---------- render helpers ----------
 
   /** Build a row of 13 cells from a label + values array */
-  function projRow(label: string, values: (number | undefined)[], format?: 'pct' | 'num') {
+  function projRow(
+    label: string,
+    values: (number | undefined)[],
+    format?: 'pct' | 'num',
+    tooltip?: string | ((i: number) => string),
+  ) {
     return (
       <tr>
         <SpreadsheetCell value={label} type="label" align="left" width="180px" />
-        {values.map((v, i) => (
-          <SpreadsheetCell
-            key={i}
-            value={format === 'pct' ? pct(v) : fmtNum(v)}
-            type="calc"
-          />
-        ))}
+        {values.map((v, i) => {
+          const tip = typeof tooltip === 'function' ? tooltip(i) : tooltip;
+          return (
+            <SpreadsheetCell
+              key={i}
+              value={format === 'pct' ? pct(v) : fmtNum(v)}
+              type="calc"
+              tooltip={tip}
+            />
+          );
+        })}
       </tr>
     );
   }
 
   /** Single value-bridge row: label + value */
-  function bridgeRow(label: string, value: number | string | null | undefined, indent = false) {
+  function bridgeRow(label: string, value: number | string | null | undefined, tooltip?: string, indent = false) {
     return (
       <tr>
         <SpreadsheetCell
@@ -204,10 +214,19 @@ export default function ValuationOutput({ data, sessionId }: { data: ValuationRe
           align="left"
           width="320px"
         />
-        <SpreadsheetCell value={fmtNum(value)} type="calc" />
+        <SpreadsheetCell value={fmtNum(value)} type="calc" tooltip={tooltip} />
       </tr>
     );
   }
+
+  // Tooltip composer for projection-table cells (column-aware)
+  const projTip = (colLabel: string, baseDesc: string) => {
+    return (i: number) => {
+      if (i === 0) return `${baseDesc} — Base year (LTM from CIQ)`;
+      if (i === 11) return `${baseDesc} — Terminal (year 10+1 perpetuity)`;
+      return `${baseDesc} — ${colLabel.replace('{i}', String(i))}`;
+    };
+  };
 
   // ---------- render ----------
 
@@ -229,21 +248,32 @@ export default function ValuationOutput({ data, sessionId }: { data: ValuationRe
             </tr>
           </thead>
           <tbody>
-            {projRow('Revenue growth rate', revenueGrowth, 'pct')}
-            {projRow('Revenues', revenues)}
-            {projRow('EBIT margin', ebitMargin, 'pct')}
-            {projRow('EBIT', ebit)}
+            {projRow('Revenue growth rate', revenueGrowth, 'pct',
+              projTip('year {i}', 'g = (Rev_t − Rev_{t-1}) / Rev_{t-1}. Year 1 = user hypothesis; years 2-5 = CAGR user input; years 6-10 = linear decay to stable growth rate ≤ RF'))}
+            {projRow('Revenues', revenues, 'num',
+              projTip('year {i}', 'Rev_t = Rev_{t-1} × (1 + g_t). Base year is LTM revenue from CIQ.'))}
+            {projRow('EBIT margin', ebitMargin, 'pct',
+              projTip('year {i}', 'Margin path: starts at user hypothesis (yr 1), converges linearly to target_operating_margin by margin_convergence_year, then holds flat.'))}
+            {projRow('EBIT', ebit, 'num',
+              projTip('year {i}', 'EBIT_t = Rev_t × margin_t (Ginzu: explicit compound, not EBIT×(1+growth))'))}
             {projRow(
               'Tax rate',
               Array(colCount).fill(taxRate),
               'pct',
+              formula('Marginal tax rate (constant)', `Country tax = ${pct(taxRate)} from countrytaxrates.xls`),
             )}
-            {projRow('EBIT(1-t)', ebitAfterTax)}
-            {projRow('Reinvestment', reinvestment)}
-            {projRow('FCFF', fcff)}
-            {projRow('Cost of capital', costOfCapital, 'pct')}
-            {projRow('Cumulated discount factor', discountFactor)}
-            {projRow('PV(FCFF)', pvFcff)}
+            {projRow('EBIT(1-t)', ebitAfterTax, 'num',
+              formula('EBIT × (1 − marginal tax rate). NOL carryforward can shield early-year income.'))}
+            {projRow('Reinvestment', reinvestment, 'num',
+              projTip('year {i}', 'Sales-to-capital method: Reinvest_t = (Rev_t − Rev_{t−lag}) / (S/C ratio). Lag = 1 year default.'))}
+            {projRow('FCFF', fcff, 'num',
+              projTip('year {i}', 'FCFF_t = EBIT(1−t)_t − Reinvest_t'))}
+            {projRow('Cost of capital', costOfCapital, 'pct',
+              'WACC from Module 2. If "stable WACC override" is set, terminal WACC may differ from years 1-10.')}
+            {projRow('Cumulated discount factor', discountFactor, 'num',
+              projTip('year {i}', 'CumDiscount_t = Π(1 / (1 + WACC_s)) for s=1..t. Product form handles non-constant WACC.'))}
+            {projRow('PV(FCFF)', pvFcff, 'num',
+              projTip('year {i}', 'PV = FCFF_t × CumDiscount_t'))}
           </tbody>
         </SpreadsheetGrid>
       </div>
@@ -251,26 +281,46 @@ export default function ValuationOutput({ data, sessionId }: { data: ValuationRe
       {/* ===== Section 2: Value Bridge ===== */}
       <SpreadsheetGrid title="Value Bridge">
         <tbody>
-          {bridgeRow('Terminal cash flow', terminalCF)}
-          {bridgeRow('Terminal cost of capital', pct(terminalCostOfCapital))}
-          {bridgeRow('Terminal value', dcf?.terminal_value_firm)}
-          {bridgeRow('PV(terminal value)', pvTerminal)}
-          {bridgeRow('PV(cash flows over next 10 years)', pvCashFlows)}
-          {bridgeRow('Sum of PV (operating assets)', valueOfOpAssets)}
-          {bridgeRow('Probability of failure', pct(failureProbability))}
-          {bridgeRow('Proceeds if firm fails', proceedsIfFails)}
-          {bridgeRow('Value of operating assets (adjusted)', adjustedOpAssets)}
-          {bridgeRow('Minus: Debt', debt)}
-          {bridgeRow('Minus: Minority interests', minorityInterests)}
-          {bridgeRow('Plus: Cash', cash)}
-          {bridgeRow('Plus: Non-operating assets', nonOpAssets)}
-          {bridgeRow('Value of equity', equityValue)}
-          {bridgeRow('Minus: Value of options', optionsValue)}
-          {bridgeRow('Value of equity in common stock', equityInCommon)}
-          {bridgeRow('Number of shares', sharesOutstanding)}
-          {bridgeRow('Value per share', valuePerShare)}
-          {bridgeRow('Current price', currentPrice)}
-          {bridgeRow('Price as % of value', pct(priceAsPctOfValue))}
+          {bridgeRow('Terminal cash flow', terminalCF,
+            'FCFF in year 10. If override_growth_perpetuity is set, FCFF is adjusted for post-yr-10 growth rate.')}
+          {bridgeRow('Terminal cost of capital', pct(terminalCostOfCapital),
+            user('Stable-period WACC', 'Default = same as year-10 WACC; can be overridden (typically 8.5% for mature firms).'))}
+          {bridgeRow('Terminal value', dcf?.terminal_value_firm,
+            formula('TV = FCFF_yr10 × (1 + g_stable) / (WACC_stable − g_stable)', 'Gordon growth; g_stable ≤ RF per Damodaran constraint.'))}
+          {bridgeRow('PV(terminal value)', pvTerminal,
+            formula('PV(TV) = TV × CumDiscount_yr10'))}
+          {bridgeRow('PV(cash flows over next 10 years)', pvCashFlows,
+            formula('Σ PV(FCFF_t) for t=1..10') + ' — ' + backendField('dcf.pv_cash_flows_sum'))}
+          {bridgeRow('Sum of PV (operating assets)', valueOfOpAssets,
+            formula('V_operating = Σ PV(FCFF) + PV(TV)') + ' — ' + backendField('dcf.value_of_operating_assets'))}
+          {bridgeRow('Probability of failure', pct(failureProbability),
+            user('Failure probability', 'Default 0%. Override via FailureRate page. Applied as overlay to going-concern value.'))}
+          {bridgeRow('Proceeds if firm fails', proceedsIfFails,
+            formula('Proceeds = V_operating × distress_proceeds_pct (or BV if failure_tie_to = "B")'))}
+          {bridgeRow('Value of operating assets (adjusted)', adjustedOpAssets,
+            formula('V_adj = V_op × (1 − p_fail) + Proceeds × p_fail'))}
+          {bridgeRow('Minus: Debt', debt,
+            ciq(inputs.ticker, 'IQ_TOTAL_DEBT', 'IQ_FY-0'))}
+          {bridgeRow('Minus: Minority interests', minorityInterests,
+            ciq(inputs.ticker, 'IQ_MINORITY_INTEREST', 'IQ_FY-0'))}
+          {bridgeRow('Plus: Cash', cash,
+            ciq(inputs.ticker, 'IQ_CASH_ST_INVEST', 'IQ_FY-0'))}
+          {bridgeRow('Plus: Non-operating assets', nonOpAssets,
+            'Cross-holdings / investments in affiliates — placeholder in current schema')}
+          {bridgeRow('Value of equity', equityValue,
+            formula('V_equity = V_op (adj) − Debt − Minority + Cash + Non-op'))}
+          {bridgeRow('Minus: Value of options', optionsValue,
+            'Iterative Black-Scholes from Module 6 (Option value page).')}
+          {bridgeRow('Value of equity in common stock', equityInCommon,
+            formula('= V_equity − Options'))}
+          {bridgeRow('Number of shares', sharesOutstanding,
+            ciq(inputs.ticker, 'IQ_BASIC_WEIGHT', 'IQ_FQ-0'))}
+          {bridgeRow('Value per share', valuePerShare,
+            formula('VPS = V_equity_common / shares') + ' — ' + backendField('final.value_per_share'))}
+          {bridgeRow('Current price', currentPrice,
+            ciq(inputs.ticker, 'IQ_CLOSEPRICE'))}
+          {bridgeRow('Price as % of value', pct(priceAsPctOfValue),
+            formula('Market / DCF ratio', '> 1 = overvalued on DCF; < 1 = undervalued'))}
         </tbody>
       </SpreadsheetGrid>
     </div>

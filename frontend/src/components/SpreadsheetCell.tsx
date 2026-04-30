@@ -84,16 +84,25 @@ export default function SpreadsheetCell({
     );
   }
 
+  const hasTip = Boolean(tooltip && tooltip.length > 0);
+
   return (
     <td
       colSpan={colSpan}
       rowSpan={rowSpan}
-      className={`${baseClasses} ${editable ? 'cursor-pointer hover:ring-2 hover:ring-yellow-400' : ''} ${tooltip ? 'cursor-help' : ''}`}
+      className={`relative group ${baseClasses} ${editable ? 'cursor-pointer hover:ring-2 hover:ring-yellow-400' : ''} ${hasTip ? 'cursor-help hover:ring-1 hover:ring-gray-400' : ''}`}
       onDoubleClick={startEdit}
       style={width ? { width } : undefined}
       title={tooltip}
     >
       {formatValue(value)}
+      {hasTip && (
+        <span
+          aria-hidden="true"
+          className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full bg-sky-500 opacity-60 group-hover:opacity-100 pointer-events-none"
+          style={{ transform: 'translate(35%, -35%)' }}
+        />
+      )}
     </td>
   );
 }
