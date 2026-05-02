@@ -15,8 +15,7 @@ as a dropdown.
 
 ## Why
 
-Damodaran's spreadsheet is the gold standard for intrinsic valuation but
-it's a black-box Excel file. This project reimplements it as auditable
+Damodaran's spreadsheet is the gold standard for intrinsic valuation. This project reimplements it as auditable
 code so every number traces to a formula, every assumption is an explicit
 user choice, and every intermediate value is inspectable via hover
 tooltips that show "this came from CIQ mnemonic X" or "this was computed
