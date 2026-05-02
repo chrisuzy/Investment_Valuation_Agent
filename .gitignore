@@ -37,11 +37,46 @@ Thumbs.db
 coverage/
 .nyc_output/
 
-# CIQ scratch / resolved files (keep templates in repo separately if needed)
-knowledge_base/ciq_fetches/_temp_*.xlsx
+# ─────────────────────────────────────────────────────────────────
+# Private / internal documents (session transcripts, planning notes,
+# personal scripts, handoff docs). Kept locally for reference but
+# never pushed to the public repo.
+# ─────────────────────────────────────────────────────────────────
+docs/private/
+
+# ─────────────────────────────────────────────────────────────────
+# Third-party data sources — NOT shipped with the open-source code
+# to respect copyright. Users supply their own data (see README).
+# ─────────────────────────────────────────────────────────────────
+
+# Data-fetch templates + fetched data (format-specific to Capital IQ
+# or any equivalent data provider; user supplies their own)
+knowledge_base/ciq_fetches/
+TEST_DATA/
+
+# Aswath Damodaran's reference workbooks and datasets (downloadable
+# from pages.stern.nyu.edu/~adamodar/ — users download fresh)
+knowledge_base/Ginzu_NVIDIA.xlsx
+knowledge_base/damodaran/
+knowledge_base/industry_lookup/indname.xlsx
+
+# Ginzu-understanding copies of prefilled workbooks
+TEST_DATA/ginzu_prefilled/
 
 # Local scratch
 /tmp_*
 *.local
 .env
 .env.local
+
+# Accidentally-committed temp files
+*.tmp
+*.bak
+
+# Ground-truth comparison workbooks (Damodaran — user downloads fresh)
+knowledge_base/groud_truth/
+
+# Scratch / test fixture xlsx files at top level
+/final_test.xlsx
+/test_wb*.xlsx
+/test_workbook*.xlsx
