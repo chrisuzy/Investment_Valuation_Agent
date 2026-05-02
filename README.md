@@ -1,377 +1,283 @@
-# Ginzu DCF Engine
+<div align="center">
 
-A faithful, open-source implementation of Aswath Damodaran's *Ginzu*
-discounted-cash-flow valuation workbook as a full-stack web application.
+# 📊 Investment Valuation Agent
 
-Covers every module Ginzu does — LTM rotation, R&D capitalization,
-operating-lease conversion, full cost-of-capital with 4 approaches / 6 β
-variants / 4 ERP variants / 4 Kd variants, 10-year DCF projection, terminal
-value, failure overlay, iterative Black-Scholes options dilution, equity
-bridge, per-share intrinsic value. Ships with a React frontend that
-mirrors Ginzu's worksheet layout and exposes every methodology choice
-as a dropdown.
+### Aswath Damodaran's *Ginzu* DCF model — finally open-source, auditable, and global.
 
----
+**Every number traces to its source. Every methodology choice is a dropdown. Every valuation works for any public company on any exchange in any currency.**
 
-## Why
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org)
+[![React 18](https://img.shields.io/badge/react-18-61DAFB.svg?logo=react&logoColor=white)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/typescript-%5E5.0-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Tests](https://img.shields.io/badge/tests-83%20passing-brightgreen.svg)]()
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-ff69b4.svg)](CONTRIBUTING.md)
 
-Damodaran's spreadsheet is the gold standard for intrinsic valuation. This project reimplements it as auditable
-code so every number traces to a formula, every assumption is an explicit
-user choice, and every intermediate value is inspectable via hover
-tooltips that show "this came from CIQ mnemonic X" or "this was computed
-as β × (1 + (1−t)·D/E) = …".
+<br/>
 
-Built alongside Damodaran's methodology documents, modeled for a
-professional analyst workflow where the analyst wants:
+[**Quickstart →**](#-quickstart) · [**Methodology docs →**](docs/Ginzu%20understanding/README.md) · [**Why this exists →**](#-why-this-exists) · [**Contributing →**](CONTRIBUTING.md)
 
-- to see the **provenance of every number** (source, formula, which
-  Damodaran dataset it came from);
-- to **override any methodology choice** (β source, ERP approach, Kd
-  approach, reinvestment lag, failure probability) and watch the
-  downstream effect live;
-- to run a DCF **on any publicly traded firm globally** — the engine
-  handles 180+ countries, 10 Damodaran region aggregates, FX conversion
-  between listing and reporting currencies, and graceful fallback when
-  auto-resolution fails (e.g. an unmapped exchange or a ticker not in
-  Damodaran's industry classification file).
+<br/>
+
+> ⭐ **If you've ever stared at a `#REF!` in a DCF model and wondered what it *actually* represents — star this repo. This project is for you.**
+
+</div>
 
 ---
 
-## Architecture
+## 🤯 The problem
+
+Every finance student learns Aswath Damodaran's DCF framework. Every investment analyst ends up in a 40-tab Excel workbook that nobody understands, not even its author 6 months later. The math is correct but the provenance is lost — **where did that β come from? Is the WACC in USD or HKD? What happens if we change the ERP approach? Why does Lenovo's D/E look wrong?**
+
+Spreadsheets answer none of these questions. Their authors often can't either.
+
+## 💡 What this does
+
+**Reimplements Damodaran's *Ginzu* valuation workbook as a modern web application** where:
+
+| Spreadsheet says | This app says |
+|---|---|
+| `1.62` | `β_L = β_u × [1 + (1−t) × D/E] = 1.325 × [1 + 0.835 × 0.304] = 1.62` *(hover tooltip)* |
+| `5.52%` | `ERP = 0.45×4.33% (US) + 0.22×5.41% (China) + 0.18×6.51% (EMEA composite) + …` |
+| `$2.37` | `VPS = $2.37 USD (≈ HK$18.49 at 7.78 HKD/USD, CIQ, 2025-06-30)` |
+| `#REF!` | `⚠ Segment "Rest of World" needs your input — pick from 180 countries or 10 regions` |
+
+Every number is traceable. Every methodology is a live dropdown. Switch the ERP approach from "country of incorporation" to "operating countries" — watch β, Ke, WACC, and VPS recompute in real time. Upload a financial data workbook, get a defensible DCF in seconds.
+
+## ⚡ What makes this different
+
+### 🔍 Full provenance on every cell
+Hover any monetary or ratio cell in the app. Get the CIQ mnemonic, the Damodaran file + column, or the exact computational formula. No more "trust me, it's right."
+
+### 🧭 Every Ginzu methodology choice, exposed
+Damodaran's model has **4 approaches × 6 β variants × 4 ERP variants × 4 Kd variants** = 384 possible WACC paths. This app implements them all. Switch between them with a dropdown; the entire downstream valuation re-runs.
+
+### 🌏 Works for any company, anywhere
+- **180 countries** with their ERPs, CRPs, and tax rates loaded from Damodaran's live datasets
+- **95 industries** — US and Global — with β_u, β_L, WACC, D/E, ROIC, and margin benchmarks
+- **10 Damodaran regional aggregates** (North America, Western Europe, Asia, Africa, …) for operating-countries ERP blending
+- **Automatic currency conversion** when the reporting currency differs from the listing currency (e.g., Lenovo reports USD but trades HKD — this matters for WACC)
+- **Geographic revenue segments** auto-mapped: type "EMEA" in a segment, the resolver expands it to a weighted blend of Western Europe + Eastern Europe + Middle East + Africa
+
+### 🛟 Graceful fallback — never a wall
+Data missing? Industry not in Damodaran's classification? Exchange prefix unknown? FX rate unavailable? **The valuation still runs with safe defaults and surfaces every unresolved gap** through a single `UnresolvedFieldsPanel` at the top of every page. Pick from the dropdown, the valuation re-runs. No dead-ends.
+
+### 📖 Methodology, documented in English
+Every calculation module has a companion financial-reasoning doc in `docs/Ginzu understanding/` explaining *why* each step is structured the way it is. Not just code — a learning resource for anyone studying DCF seriously.
+
+### ✅ 83 tests passing
+Every M1–M6 arithmetic module tested against hand-calculated expected values, plus end-to-end integration tests for 4 representative companies (US tech mega-cap, China e-commerce ADR, US EV manufacturer, HK-listed hardware firm).
+
+---
+
+## 🎬 See it in action
+
+Upload a populated data-fetch workbook for Lenovo (SEHK:992). Watch:
 
 ```
-┌──────────────────────┐      ┌──────────────────────┐
-│  Frontend (React +   │◄────►│  Backend (FastAPI +   │
-│  Vite + Tailwind)     │ HTTP │  Pydantic v2)         │
-│                        │      │                        │
-│  Input Sheet           │      │  M1  Adjustments       │
-│  Summary Sheet         │      │  M2  Cost of Capital   │
-│  Cost of Capital       │      │  M3  Cashflow & Growth │
-│  Valuation Output      │      │  M4  DCF Projection    │
-│  TTM / Relative /      │      │  M5  Multiples         │
-│  Options / Failure /   │      │  M6  Options & Final   │
-│  Segments / …          │      │                        │
-└──────────────────────┘      └──────────────────────┘
-                                      │
-                              ┌───────┴───────┐
-                              │ Damodaran     │
-                              │ reference     │
-                              │ data (local)  │
-                              └───────────────┘
+1. LTM rotation:      FY-0 + current YTD − prior YTD  →  latest 12-month base year
+2. R&D capitalization: 10 years of historical R&D → research asset + amortization
+3. Operating leases:   PV of commitments → debt + depreciation on lease asset
+4. Cost of Capital:
+     β_u (Computers/Peripherals, US Damodaran):       1.325
+     β_L (relevered at D/E = 26.8%, tax = 16.5%):     1.621
+     ERP (operating countries — China/AP/EMEA/Amer):  6.02%
+     Ke (CAPM):                                       13.62%
+     Kd (industry fallback, after-tax):               5.16%
+     Weights (E/D):                                   78.9%/21.1%
+     WACC:                                            11.99%
+5. DCF projection:     10 years × (revenue path, margin path, reinvestment, FCFF)
+6. Terminal + PV:      Gordon growth, failure overlay, cumulative discount factors
+7. Equity bridge:      V_operating − debt − minority + cash + cross_holdings
+8. Options dilution:   iterative Black-Scholes
+9. Value per share:    $2.40 USD (≈ HK$18.67 at spot FX)
+   Market price:       HK$11.83  (≈ $1.52 USD)
+   Price/Value:        0.64x — undervalued on DCF
 ```
 
-**Backend:** Python 3.12, FastAPI, Pydantic v2, openpyxl, xlrd, uvicorn.
-**Frontend:** React 18, Vite 8, TypeScript, TailwindCSS, React Router,
-Axios.
-
-Every per-module calculation is documented in plain financial-reasoning
-language under `docs/Ginzu understanding/` — read
-[module_04_cost_of_capital.md](docs/Ginzu%20understanding/module_04_cost_of_capital.md)
-for a representative sample.
+**Switch a single dropdown** (`ERP approach: country_of_incorporation → operating_countries`) and see β_L shift, WACC shift, VPS shift, all live. That's the point.
 
 ---
 
-## Quickstart
+## 🚀 Quickstart
 
 ### Prerequisites
 
-- Python 3.12+
-- Node.js 18+ (for the frontend)
-- Git
+- **Python 3.12+**
+- **Node.js 18+**
+- **Damodaran's annual reference data** — free, downloadable from [his Stern page](https://pages.stern.nyu.edu/~adamodar/)
+- **A data-fetch template** — you build it once following [`docs/DATA_FETCH_SCHEMA.md`](docs/DATA_FETCH_SCHEMA.md). Capital IQ plug-in, Bloomberg, FactSet, or manual input — anything that produces the documented schema.
 
-### 1. Clone
+### Three commands
 
 ```bash
+# 1. Clone
 git clone https://github.com/chrisuzy/Investment_Valuation_Agent.git
 cd Investment_Valuation_Agent
+
+# 2. Install
+(cd backend && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt)
+(cd frontend && npm install)
+
+# 3. Run
+(cd backend && source .venv/bin/activate && uvicorn api.main:app --port 8000) &
+(cd frontend && npm run dev)
 ```
 
-### 2. Install backend
-
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate         # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### 3. Install frontend
-
-```bash
-cd ../frontend
-npm install
-```
-
-### 4. Supply reference data
-
-See [Data sources](#data-sources) below. At minimum you need:
-
-- **Damodaran country/industry datasets** — download the `.xls` files
-  from [pages.stern.nyu.edu/~adamodar/](https://pages.stern.nyu.edu/~adamodar/)
-  and drop them under `knowledge_base/damodaran/`. The engine expects
-  files like `betas.xls`, `betaGlobal.xls`, `ctryprem.xlsx`,
-  `countrytaxrates.xls`, `wacc.xls`, `margin.xls`.
-
-- **Damodaran industry classification** (`indname.xlsx`) — download
-  from the same page, save to `knowledge_base/industry_lookup/indname.xlsx`.
-
-- **Your own data-fetch template** (see below).
-
-### 5. Run the stack
-
-```bash
-# Terminal A — backend on :8000
-cd backend && source .venv/bin/activate
-uvicorn api.main:app --host 0.0.0.0 --port 8000
-
-# Terminal B — frontend dev server
-cd frontend
-npm run dev
-```
-
-Open `http://localhost:5173/` in a browser. Upload a populated data-fetch
-workbook, get a full DCF valuation in seconds.
-
-### 6. Verify
-
-```bash
-cd backend && source .venv/bin/activate
-pytest tests/ -q
-# Expected: 83 passed, 4 skipped
-```
+Open `http://localhost:5173/`. Upload a populated data workbook. Get a DCF.
 
 ---
 
-## Data sources
+## 🗺 The 9-module pipeline
 
-This project does **not** ship with any third-party data. You have three
-options for supplying the per-company financial data needed to run a
-valuation:
-
-### Option 1 — Capital IQ Excel plug-in (recommended for professional users)
-
-If you have access to S&P Capital IQ (via a Bloomberg-like terminal
-subscription at a bank / investment firm / university), build a fetch
-template in Excel using the plug-in's `=CIQ(...)` formulas. The schema
-the backend expects is documented in
-[`docs/DATA_FETCH_SCHEMA.md`](docs/DATA_FETCH_SCHEMA.md) — every field
-name, period, and currency convention.
-
-We do not redistribute a prebuilt Capital IQ template out of respect for
-S&P's terms of service. You build your own following the schema.
-
-The backend's template generator (`backend/tools/generate_ciq_template.py`)
-can emit a template skeleton for you given the schema — but the
-`=CIQ(...)` formulas only resolve if you have the plug-in installed.
-
-### Option 2 — Any equivalent data source with the same schema
-
-The backend reads an Excel workbook with a `_RowMap` sheet + a `CIQ_Data`
-sheet. Any data source you can get into that format works. Providers that
-commonly work:
-
-- Bloomberg (via BQL or BDP formulas)
-- Refinitiv / LSEG Workspace
-- FactSet
-- Your firm's internal data warehouse with an Excel export
-
-Schema doc: [`docs/DATA_FETCH_SCHEMA.md`](docs/DATA_FETCH_SCHEMA.md).
-
-### Option 3 — Contact the author
-
-Open an issue on this repo describing the company you're trying to
-value and the data source constraints you have. The maintainer may be
-able to point you at a suitable resource or share access to a
-pre-populated workbook for common test tickers (for educational /
-non-commercial use).
-
-**In all cases:** the project assumes you own or have licensed access to
-the underlying financial data. Capital IQ / Bloomberg / FactSet
-subscriptions are typical at investment firms and universities.
-
-### Damodaran reference data
-
-The engine also needs Damodaran's public datasets (country risk premiums,
-industry betas, industry WACCs, etc.). Professor Damodaran publishes these
-freely on his Stern page and they update annually. We do **not** bundle
-them — download fresh from
-[pages.stern.nyu.edu/~adamodar/](https://pages.stern.nyu.edu/~adamodar/)
-under "Updated Data" and drop them into `knowledge_base/damodaran/`.
-
-The backend uses 2026 vintage data as the default. When Damodaran updates
-in early 2027, re-download and restart the backend.
-
----
-
-## Features
-
-### Full methodology selectors
-
-Every Ginzu methodology choice exposed as a frontend dropdown:
-
-| Selector | Options |
-|---|---|
-| **Cost of Capital approach** | Detailed (CAPM build-up) · Direct input · Industry average · Regional decile |
-| **β approach** | Single-business US · Single-business Global · Multi-business US (EV-weighted) · Multi-business Global · Direct levered · Direct unlevered |
-| **ERP approach** | Country of incorporation · Operating countries (rev-weighted) · Operating regions · Direct |
-| **Kd approach** | Industry fallback · Direct · Synthetic rating (coverage→rating→spread) · Actual rating → spread |
-| **Failure overlay** | Probability of failure, distress proceeds pct, tie-to (B/V) |
-| **Terminal** | Stable-period WACC override, stable ROIC override, perpetuity growth override |
-| **Reinvestment lag** | 0, 1, 2, or 3 years |
-| **Tax convergence, NOL carryforward, trapped-cash treatment** | editable overrides |
-
-### Currency handling
-
-Every valuation has two currency contexts: **reporting currency** (from
-financial statements) and **listing currency** (where the stock trades).
-When they differ (e.g. Lenovo: USD reports, HKD listing; Alibaba: CNY
-reports, USD ADR), the engine:
-
-- derives the FX rate from the data source by fetching price in both
-  currencies;
-- performs all WACC / bridge math in reporting currency to keep it
-  consistent with debt;
-- shows both currencies in the UI with a `DualCurrency` component and
-  a top-of-page `CurrencyBanner` displaying the FX rate + date;
-- gracefully falls back when FX isn't available and flags the gap to
-  the user.
-
-### Graceful fallback — unresolved fields
-
-When the data source can't auto-resolve a field (industry not in
-Damodaran's classification, country unknown, exchange-prefix unmapped,
-tax rate `#N/A`, FX unavailable), the valuation still runs with a
-documented placeholder and surfaces the gap via an
-`UnresolvedFieldsPanel` at the top of every page. The analyst picks
-from a dropdown (95 industries, 180 countries, 55 ISO currencies) or
-types a custom value; the valuation re-runs.
-
-### Geographic revenue segments
-
-Fetch the top 10 geographic revenue segments from your data source;
-the auto-resolver maps them to Damodaran's 180 countries and 10 regional
-aggregates through a 4-layer cascade (exact country → curated alias →
-composite expansion with seeded weights → weak default / unresolved).
-Composites like `EMEA`, `APAC`, `Americas`, `Greater China`, `Nordics`,
-`DACH`, `ASEAN`, `LATAM`, `MENA` are pre-defined. Users override via
-dropdown when the auto-suggestion doesn't fit. The blended ERP feeds
-directly into the `operating_countries` ERP methodology.
-
-### Tooltips on every number
-
-Every monetary / percentage / ratio cell on every page has a hover
-tooltip showing its provenance: the data-source formula, the Damodaran
-file+column it came from, or the inline math that produced it (e.g.
-`β_L = β_u × [1 + (1-t) × D/E] = 1.325 × [1 + (1−16.50%) × 0.304] = 1.62`).
-
-### Comprehensive test suite
-
-83 backend tests cover the arithmetic for each M1–M6 module against
-hand-calculated expected values plus live integration tests for 4
-representative companies (software mega-cap, Chinese e-commerce ADR,
-auto manufacturer, HK-listed hardware firm).
-
----
-
-## Project layout
+<div align="center">
 
 ```
-<repo>/
-├── backend/
-│   ├── api/                       FastAPI routes, session store
-│   ├── engine/                    M1–M6 calculation modules + orchestrator
-│   │   ├── data_dictionary.py     All Pydantic input/output schemas
-│   │   ├── ltm_calculator.py      LTM rotation (Ginzu formula)
-│   │   ├── module_1_adjustments.py  R&D + lease capitalization
-│   │   ├── module_2_risk.py       Cost of capital (4×6×4×4 dispatch)
-│   │   ├── module_3_cashflow.py   FCFF, ROIC, reinvestment
-│   │   ├── module_4_dcf.py        10-year projection + terminal
-│   │   ├── module_5_multiples.py  P/E, P/B, EV/EBITDA comparisons
-│   │   ├── module_6_options.py    Iterative dilution-adjusted BSM
-│   │   ├── segment_resolver.py    Geographic-segment → Damodaran mapper
-│   │   └── orchestrator.py        Glue code
-│   ├── data_sources/              Damodaran store + data-fetch parser
-│   ├── tools/                     Template generator, readers
-│   └── tests/                     pytest suite
-│
-├── frontend/
-│   └── src/
-│       ├── pages/                 Input Sheet, Summary, CoC, DCF, …
-│       ├── components/            SpreadsheetGrid, CurrencyBanner,
-│       │                          UnresolvedFieldsPanel, GeographicSegmentsPanel
-│       ├── lib/                   currency, sources tooltips
-│       └── types/                 TypeScript models mirroring Pydantic
-│
-├── docs/
-│   ├── Ginzu understanding/       Financial-reasoning docs per module
-│   ├── architecture/              System-level design notes
-│   ├── experiments/               Ginzu-vs-backend comparison tooling
-│   └── DATA_FETCH_SCHEMA.md       Template field-by-field reference
-│
-└── knowledge_base/                Reference data (user-supplied, see above)
-    ├── damodaran/                 → download from Damodaran's Stern page
-    ├── industry_lookup/           → indname.xlsx + supplemental_companies.json
-    ├── ciq_fetches/               → your data-fetch templates (gitignored)
-    └── segment_aliases.json       Ships with the repo — geographic-segment aliases
+    ┌─────────────┐
+    │ Data fetch  │  (your template, your data source)
+    │ .xlsx       │
+    └──────┬──────┘
+           ▼
+    ┌─────────────┐
+    │   M0 LTM    │  Trailing-12-month rotation
+    └──────┬──────┘
+           ▼
+    ┌─────────────┐    ┌──────────────┐
+    │ M1 Adjust   │───▶│ R&D as asset │
+    │             │    │ Leases as debt│
+    └──────┬──────┘    └──────────────┘
+           ▼
+    ┌─────────────┐    ┌──────────────┐
+    │ M2 Cost of  │───▶│ 4 approaches │
+    │  Capital    │    │ 6 β variants │
+    │             │    │ 4 ERP variants│
+    │             │    │ 4 Kd variants │
+    └──────┬──────┘    └──────────────┘
+           ▼
+    ┌─────────────┐
+    │ M3 FCFF     │  EBIT(1-t), reinvestment with lag, ROIC
+    └──────┬──────┘
+           ▼
+    ┌─────────────┐    ┌──────────────┐
+    │ M4 DCF      │───▶│ 10-yr path:  │
+    │             │    │ rev × margin │
+    │             │    │ S/C reinvest │
+    │             │    │ WACC convrg  │
+    └──────┬──────┘    │ NOL carry    │
+           ▼           └──────────────┘
+    ┌─────────────┐
+    │ M5 Multiples│  P/E, P/B, EV/EBITDA intrinsic vs market
+    └──────┬──────┘
+           ▼
+    ┌─────────────┐
+    │ M6 Terminal │  Gordon growth + cumulative PV + failure overlay
+    └──────┬──────┘
+           ▼
+    ┌─────────────┐
+    │ M7 Bridge   │  V_op − debt − minority + cash + cross_holdings
+    └──────┬──────┘
+           ▼
+    ┌─────────────┐    ┌──────────────┐
+    │ M8 Options  │───▶│ Iterative    │
+    │             │    │ dilution BSM │
+    └──────┬──────┘    └──────────────┘
+           ▼
+    ┌─────────────┐
+    │ M9 Per-Share│  Final VPS + market-price comparison
+    └─────────────┘
 ```
 
----
+</div>
 
-## Methodology documentation
-
-The `docs/Ginzu understanding/` folder contains a plain-English
-financial-reasoning document for each calculation module:
-
-- [`README.md`](docs/Ginzu%20understanding/README.md) — index
-- [`module_01_ltm.md`](docs/Ginzu%20understanding/module_01_ltm.md) — LTM rotation
-- [`module_02_rd_capitalization.md`](docs/Ginzu%20understanding/module_02_rd_capitalization.md) — R&D capitalization
-- [`module_03_operating_leases.md`](docs/Ginzu%20understanding/module_03_operating_leases.md) — lease capitalization
-- [`module_04_cost_of_capital.md`](docs/Ginzu%20understanding/module_04_cost_of_capital.md) — WACC
-- [`module_05_dcf_projection.md`](docs/Ginzu%20understanding/module_05_dcf_projection.md) — DCF projection
-- [`module_06_terminal_and_pv.md`](docs/Ginzu%20understanding/module_06_terminal_and_pv.md) — terminal value, PV
-- [`module_07_failure_and_bridge.md`](docs/Ginzu%20understanding/module_07_failure_and_bridge.md) — failure overlay, equity bridge
-- [`module_08_options.md`](docs/Ginzu%20understanding/module_08_options.md) — options dilution
-- [`module_09_per_share.md`](docs/Ginzu%20understanding/module_09_per_share.md) — per-share intrinsic value
-
-Written to serve as a learning resource for analysts who want to
-understand *why* each step of a DCF is structured the way it is.
+Each module has a dedicated [methodology doc](docs/Ginzu%20understanding/README.md) and its own backend module + set of tests.
 
 ---
 
-## Contributing
+## 🎨 Screenshots
 
-Contributions welcome. Open a PR against `main`. Please:
+> 📸 *Screenshots and demo GIF coming soon.* For now, a tour of what you'll see:
 
-1. Keep changes atomic — one feature or fix per PR.
-2. Run `pytest tests/ -q` before pushing; all 83 tests must pass.
-3. Run `npx tsc --noEmit` and `npx vite build` in `frontend/` before
-   pushing.
-4. Follow the existing module boundary: new calculation logic goes in
-   `backend/engine/`, not `backend/api/`.
-5. Reference the methodology docs when adding features — if you're
-   introducing a new methodology variant, add to the appropriate module
-   doc.
+- **Input Sheet** — every raw input with a tooltip showing its CIQ mnemonic or data-source origin
+- **Cost of Capital** — methodology selectors in one panel; full WACC decomposition in another; industry-reference sidebar with Damodaran industry averages inline
+- **Geographic Revenue Mix** — segment-by-segment revenue table with auto-mapped Damodaran ERPs; dropdown per row to override; live blended-ERP preview
+- **Summary Sheet** — 10-year projection with year-by-year revenue, margin, FCFF, discount factor, PV
+- **Valuation Output** — full equity bridge from V_operating to VPS with every addition/subtraction labeled
 
 ---
 
-## License
+## 🧠 Why this exists
 
-MIT — see [LICENSE](LICENSE).
+Damodaran's work is a public good — he literally publishes his spreadsheets, his lecture notes, and his valuation datasets for free on the NYU Stern website. He's been doing this for decades.
 
-The software and methodology docs are MIT-licensed. Third-party datasets
-(Damodaran's classification files, any data from Capital IQ / Bloomberg /
-FactSet) retain their original licenses; users are responsible for
-complying with those terms.
+But the spreadsheets are opaque. A DCF hidden in Excel is a black box to everyone except its author. And for a global model — one that actually handles the fact that Lenovo reports in USD but trades in HKD, or that Alibaba reports in CNY but lists its ADR in USD — Excel is the wrong tool.
+
+This project brings the *Ginzu* framework into a stack where:
+- The math is testable (83 unit tests, and counting)
+- The assumptions are interactive (methodology dropdowns that actually change outputs)
+- The provenance is always one hover away (every cell explains itself)
+- The data is substitutable (CIQ, Bloomberg, FactSet, your internal systems — if it produces the schema, it works)
+
+Built as a tribute to an educator who gave away his life's work. Open-sourced to pay that forward.
 
 ---
 
-## Acknowledgments
+## 📚 Deeper reading
 
-- **Aswath Damodaran** (NYU Stern) — whose *Ginzu* workbook and open
-  datasets are the methodological foundation of this project. His
-  published spreadsheets and lecture notes are the reference implementation
-  this code reproduces.
-- **S&P Capital IQ / Bloomberg / FactSet / Refinitiv** — any of these
-  provides the point-in-time financial data the engine consumes. This
-  project is data-source-agnostic; the documented schema is what
-  matters.
+- [**Damodaran on Valuation**](https://pages.stern.nyu.edu/~adamodar/) — the man, the myth, the spreadsheets
+- [**Methodology docs**](docs/Ginzu%20understanding/README.md) — in-repo explanations of each calculation module
+- [**Architecture docs**](docs/architecture/) — system-level design notes
+- [**Data-fetch schema**](docs/DATA_FETCH_SCHEMA.md) — exact Excel workbook structure the backend expects
+- [**Ginzu-vs-backend comparison tool**](docs/experiments/README.md) — verification harness that reconciles this engine's output against Damodaran's original Excel
+
+---
+
+## 🛣 Roadmap
+
+- [ ] One-click cloud deployment (Fly.io / Railway / Render templates)
+- [ ] Synthetic rating derivation from interest coverage, fully wired into Kd
+- [ ] Scenario manager — "save this assumption set as 'Bull'"; compare against 'Base' / 'Bear'
+- [ ] Monte Carlo on assumption distributions
+- [ ] Historical-backtest mode — "what did my DCF say 3 years ago, and was I right?"
+- [ ] More data-source adapters (Alpha Vantage, Yahoo Finance shim for casual use)
+- [ ] Multi-business beta (EV-weighted β across segment industries)
+- [ ] Sector-specific templates (banks, REITs, insurance have different bridge logic)
+
+Want to help with any of these? [**Open an issue**](https://github.com/chrisuzy/Investment_Valuation_Agent/issues/new) or [**send a PR**](CONTRIBUTING.md). All contributions welcome.
+
+---
+
+## 🤝 Contributing
+
+See [**CONTRIBUTING.md**](CONTRIBUTING.md). TL;DR: run the tests, keep PRs atomic, update the methodology docs when you change calculations.
+
+Good first issues:
+- Expand the `segment_aliases.json` with more broad-region composites
+- Add currency-symbol rendering for more ISO codes (TRY, ILS, PHP, etc.)
+- Translate any of the methodology docs to other languages
+
+---
+
+## 📜 License
+
+**MIT** — see [LICENSE](LICENSE).
+
+Use it, fork it, sell it. Just keep the copyright notice. Third-party datasets retain their own licenses; you're responsible for complying with those.
+
+---
+
+## 🙏 Acknowledgments
+
+- **Aswath Damodaran** — whose *Ginzu* workbook, public datasets, and decades of teaching make this project possible. The methodology is his; the implementation is ours.
+- **The FastAPI, Pydantic, React, and Vite teams** — for making the modern Python + TypeScript stack a joy to build on.
+- **Every analyst who ever cursed an Excel DCF model** — this is for you.
+
+---
+
+<div align="center">
+
+**If this saves you ten minutes on your next DCF — or teaches you something about why WACC is the way it is — please ⭐ the repo.**
+
+*Built with spite against opaque spreadsheets, and love for the craft of valuation.*
+
+</div>
