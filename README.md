@@ -146,6 +146,8 @@ cd Investment_Valuation_Agent
 
 Open `http://localhost:5173/`. Upload a populated data workbook. Get a DCF.
 
+**→ Full walkthrough:** [**Tutorial — Value Microsoft in 5 minutes**](docs/TUTORIAL.md)
+
 ---
 
 ## 🗺 The 9-module pipeline
@@ -233,11 +235,13 @@ Built as a tribute to an educator who gave away his life's work. Open-sourced to
 
 ## 📚 Deeper reading
 
+- [**Tutorial — Value Microsoft in 5 minutes**](docs/TUTORIAL.md) — hands-on end-to-end walkthrough, no Capital IQ required
 - [**Damodaran on Valuation**](https://pages.stern.nyu.edu/~adamodar/) — the man, the myth, the spreadsheets
 - [**Methodology docs (per-module)**](docs/Ginzu%20understanding/README.md) — financial-reasoning explanations written in plain English
 - [**Architecture docs**](docs/architecture/) — system-level design notes
 - [**Data-fetch schema**](docs/DATA_FETCH_SCHEMA.md) — exact Excel workbook structure the backend expects
 - [**Ginzu-vs-backend comparison harness**](docs/experiments/README.md) — the verification tool that produced the ~0% WACC match above
+- [**Changelog**](CHANGELOG.md)
 
 ---
 

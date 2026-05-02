@@ -12,8 +12,12 @@ dependencies = [
     "openpyxl>=3.1",
     "xlrd>=2.0",
     "pandas>=2.1",
-    "pywin32>=306",
     "python-multipart>=0.0.9",
+    "python-dateutil>=2.8",
+    # pywin32 is Windows-only and only needed for Excel COM automation in
+    # tools/capiq_excel_automation.py. Marked as platform-conditional so it
+    # doesn't block installation on Linux / macOS / CI runners.
+    'pywin32>=306; platform_system == "Windows"',
 ]
 
 [project.optional-dependencies]
