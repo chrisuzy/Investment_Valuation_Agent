@@ -96,10 +96,27 @@ export default function SensitivityPanel({ data, onPatch, onPatchMany }: Props) 
   }, []);
 
   // --- Live impact cards ---
-  const vps = data.final?.value_per_share ?? null;
-  const opAssets = data.dcf?.value_of_operating_assets ?? null;
-  const mktPrice = fin0?.stock_price ?? null;
-  const ratio = vps != null && mktPrice != null && vps !== 0 ? mktPrice / vps : null;
+  //
+  // Currency handling: VPS is in the reporting currency (e.g. USD for a
+  // firm reporting in USD). The quoted stock price can be in a DIFFERENT
+  // currency (Lenovo reports USD but trades HKD). The Price/Value ratio
+  // must be computed with both sides in the SAME currency — convert the
+  // market price to reporting currency via the FX rate before dividing.
+  // Matches the convention used by the existing ValuationOutput bridge
+  // and SummarySheet "reporting-ccy basis" row.
+  const vps = data.final?.value_per_share ?? null;                   // reporting ccy
+  const opAssets = data.dcf?.value_of_operating_assets ?? null;      // reporting ccy
+  const mktPriceListing = fin0?.stock_price ?? null;                 // listing ccy
+  const listingCcy = data.inputs.stock_price_currency;
+  const reportingCcy = data.inputs.reporting_currency;
+  const fxRate = data.inputs.fx_rate;                                // listing → reporting
+  const sameCcy = listingCcy && reportingCcy && listingCcy === reportingCcy;
+  const mktPriceInReporting =
+    mktPriceListing != null && (sameCcy ? mktPriceListing : fxRate != null ? mktPriceListing * fxRate : null);
+  const ratio = (vps != null && mktPriceInReporting != null && vps !== 0)
+    ? mktPriceInReporting / vps : null;
+  const ratioUnavailable =
+    !sameCcy && fxRate == null && listingCcy !== reportingCcy && listingCcy && reportingCcy;
 
   // --- Archetype tracking ---
   const currentArchetype = useMemo(() => closestArchetype(data), [data]);
@@ -150,15 +167,34 @@ export default function SensitivityPanel({ data, onPatch, onPatchMany }: Props) 
         </div>
 
         <div className="space-y-3">
-          <ImpactCard label="Value per share (DCF)" value={fmtMoney(vps, ccy)} accent="emerald" />
-          <ImpactCard label="Market price" value={fmtMoney(mktPrice, data.inputs.stock_price_currency)} accent="sky" />
+          <ImpactCard label={`Value per share (DCF, ${reportingCcy ?? '—'})`} value={fmtMoney(vps, reportingCcy)} accent="emerald" />
+          <ImpactCard
+            label={`Market price (${listingCcy ?? '—'})`}
+            value={fmtMoney(mktPriceListing, listingCcy)}
+            subtle={
+              !sameCcy && mktPriceInReporting != null && reportingCcy
+                ? `≈ ${fmtMoney(mktPriceInReporting, reportingCcy)} @ FX ${fxRate?.toFixed(4)}`
+                : undefined
+            }
+            accent="sky"
+          />
           <ImpactCard
             label="Price / Value"
-            value={ratio != null ? `${ratio.toFixed(2)}×` : '—'}
-            subtle={ratio != null ? (ratio > 1 ? 'Overvalued on DCF' : 'Undervalued on DCF') : undefined}
+            value={
+              ratio != null ? `${ratio.toFixed(2)}×`
+              : ratioUnavailable ? 'FX unavailable'
+              : '—'
+            }
+            subtle={
+              ratio != null
+                ? `${sameCcy ? 'same ccy' : `both in ${reportingCcy}`} · ${ratio > 1 ? 'Overvalued on DCF' : 'Undervalued on DCF'}`
+                : ratioUnavailable
+                  ? `${listingCcy}→${reportingCcy} rate missing in CIQ template`
+                  : undefined
+            }
             accent={ratio == null ? 'slate' : ratio > 1 ? 'rose' : 'emerald'}
           />
-          <ImpactCard label="Operating-asset value" value={fmtMoney(opAssets, ccy)} subtle={ccy ? `${ccy} millions` : undefined} accent="slate" />
+          <ImpactCard label="Operating-asset value" value={fmtMoney(opAssets, reportingCcy)} subtle={reportingCcy ? `${reportingCcy} millions` : undefined} accent="slate" />
           <p className="text-[11px] text-slate-500 leading-relaxed pt-1">
             Slider commits debounce ~300 ms. Tornado re-ranks on each commit.
           </p>
@@ -299,10 +335,15 @@ function DriverSlider({
   // Map the driver's patch_path back to a display format and industry reference
   const meta = useMemo(() => getDriverMeta(bar, industry), [bar, industry]);
 
-  // Slider range = sweep range with 15% padding beyond (user might want to go outside industry Q1/Q3)
-  const padSpan = (bar.range_hi - bar.range_lo) * 0.3;
-  const sliderMin = bar.range_lo - padSpan;
-  const sliderMax = bar.range_hi + padSpan;
+  // Slider bounds are INDEPENDENT of the industry sweep range. The tornado
+  // sweep uses industry Q1/Q3 (or canonical Damodaran ranges) purely for
+  // ranking purposes; the slider itself needs to move well beyond those
+  // bounds for cases like a firm running at 4% operating margin when the
+  // industry median is 20%. Industry Q1/median/Q3 tick marks stay on the
+  // track as visual reference only.
+  const wide = getDriverWideBounds(bar.driver, data);
+  const sliderMin = wide.min;
+  const sliderMax = wide.max;
   const span = sliderMax - sliderMin;
 
   const pct = percentile(currentValue, bar.range_lo, (bar.range_lo + bar.range_hi) / 2, bar.range_hi);
@@ -418,6 +459,29 @@ function getDriverMeta(bar: SensitivityBar, _industry: ValuationResponse['inputs
       return { step: 10, format: (v) => `${v >= 0 ? '+' : ''}${Math.round(v)}bp` };
     default:
       return { step: 0.01, format: (v) => v.toFixed(2) };
+  }
+}
+
+/** Wide, driver-specific hard bounds for the slider.
+ *
+ * These intentionally go far beyond industry Q1/Q3 so the user can model
+ * outlier cases (distressed companies at negative margins, disruptors at
+ * 80% margins, capital-intensive firms at 0.3× sales-to-capital, etc.).
+ * Damodaran industry markers remain as visual tick marks on the track,
+ * but they do NOT constrain the slider.
+ */
+function getDriverWideBounds(driver: string, data: ValuationResponse): { min: number; max: number } {
+  const rf = data.inputs.macro_inputs?.risk_free_rate ?? 0.04;
+  switch (driver) {
+    case 'revenue_growth_next_year':    return { min: -0.30, max: 1.00 };   // -30% to +100%
+    case 'revenue_growth_years_2_5':    return { min: -0.20, max: 0.60 };   // -20% to +60%
+    case 'growth_perpetuity_rate':      return { min: 0.0,   max: Math.max(0.10, rf + 0.05) };  // 0% to (RF+5%)
+    case 'target_operating_margin':     return { min: -0.30, max: 0.80 };   // -30% to +80%
+    case 'margin_convergence_year':     return { min: 1,     max: 20 };     // 1 to 20 years
+    case 'sales_to_capital_high':       return { min: 0.1,   max: 15.0 };   // 0.1× to 15×
+    case 'wacc_level_shift_bps':        return { min: -500,  max: 500 };    // ±500 bps
+    case 'failure_probability':         return { min: 0.0,   max: 1.0 };    // 0% to 100%
+    default:                            return { min: 0,     max: 1 };
   }
 }
 

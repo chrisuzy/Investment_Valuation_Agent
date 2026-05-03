@@ -151,6 +151,7 @@ def run_full_valuation(
     computed_cm = compute_company_metrics(
         inputs.raw_financials,
         cost_of_capital=report.cost_of_capital,
+        adjusted=report.adjusted,
         tax_rate=tax_rate,
     )
     # Preserve any user-supplied std_dev_stock / marginal_sales_to_capital
