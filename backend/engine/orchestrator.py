@@ -25,6 +25,7 @@ from .module_4_dcf import compute_dcf
 from .module_5_multiples import compute_multiples
 from .module_6_options import compute_options_and_final_value
 from .ltm_calculator import compute_ltm_financials
+from .company_metrics import compute_company_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,32 @@ def run_full_valuation(
     report.final = compute_options_and_final_value(
         report.dcf, inputs.option_inputs, inputs.macro_inputs
     )
+
+    # --- Populate company_metrics so the Input Sheet "Company" column has
+    #     data to display next to the industry references. Pulls from the
+    #     raw financials we already have + the WACC we just computed.
+    tax_rate = (
+        inputs.macro_inputs.tax_rate_marginal
+        if inputs.macro_inputs and inputs.macro_inputs.tax_rate_marginal is not None
+        else 0.21
+    )
+    computed_cm = compute_company_metrics(
+        inputs.raw_financials,
+        cost_of_capital=report.cost_of_capital,
+        tax_rate=tax_rate,
+    )
+    # Preserve any user-supplied std_dev_stock / marginal_sales_to_capital
+    # by only overwriting null fields on the input.
+    existing = inputs.company_metrics
+    if existing is None:
+        inputs.company_metrics = computed_cm
+    else:
+        for field_name in (
+            "revenue_growth", "pretax_operating_margin", "sales_to_capital",
+            "marginal_sales_to_capital", "roic", "cost_of_capital",
+        ):
+            if getattr(existing, field_name, None) is None:
+                setattr(existing, field_name, getattr(computed_cm, field_name))
 
     return report
 

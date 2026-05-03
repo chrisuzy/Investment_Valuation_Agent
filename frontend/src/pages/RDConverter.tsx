@@ -11,7 +11,11 @@ export default function RDConverter({ data, sessionId }: { data: ValuationRespon
 
   const n = adj.amortization_period_n;
   const currentRD = adj.r_and_d_expense_current;
-  const pastRD = adj.r_and_d_expense_past;
+  // Truncate to the amortization window. Entries older than N contribute zero
+  // to both unamortized-balance and current-year amortization, so rendering
+  // them is visual noise. Matches the Input Sheet which iterates exactly N
+  // rows via Array.from({ length: amortization_period_n }).
+  const pastRD = adj.r_and_d_expense_past.slice(0, n);
 
   // Build amortization schedule rows.
   // For each past year i (0-indexed, where i=0 is t-1, i=1 is t-2, ...):

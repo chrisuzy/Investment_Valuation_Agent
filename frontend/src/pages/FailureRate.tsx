@@ -1,4 +1,5 @@
 import type { ValuationResponse } from '../types/valuation';
+import type { PatchValue } from '../api/client';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
@@ -22,10 +23,25 @@ const DEFAULT_RATES = [
   { rating: 'D2/D', prob1: 1.0000, prob5: 1.0000, prob10: 1.0000 },
 ];
 
-export default function FailureRate({ data, sessionId }: { data: ValuationResponse; sessionId?: string | null }) {
+interface Props {
+  data: ValuationResponse;
+  sessionId?: string | null;
+  onPatch?: (path: string, value: PatchValue) => void | Promise<void>;
+}
+
+export default function FailureRate({ data, onPatch }: Props) {
   const failProb = data.inputs.valuation_assumptions.failure_probability;
   const proceedsPct = data.inputs.valuation_assumptions.distress_proceeds_pct;
   const opAssets = data.dcf?.value_of_operating_assets ?? 0;
+
+  // Parse "5" or "5%" or "0.05" → decimal fraction. User-friendly: accept
+  // percentages entered without the % sign (e.g. "2.5") and normalize.
+  const parsePct = (raw: string): number | null => {
+    const cleaned = raw.replace(/[,%\s]/g, '');
+    const n = parseFloat(cleaned);
+    if (isNaN(n)) return null;
+    return n > 1 ? n / 100 : n;
+  };
 
   return (
     <div className="max-w-5xl">
@@ -36,17 +52,29 @@ export default function FailureRate({ data, sessionId }: { data: ValuationRespon
         <tbody>
           <tr>
             <SpreadsheetCell type="label" value="Probability of failure" />
-            <SpreadsheetCell type="hypothesis" value={failProb} editable
+            <SpreadsheetCell type="hypothesis" value={(failProb * 100).toFixed(2) + '%'} editable
+              onChange={(raw) => {
+                const v = parsePct(raw);
+                if (v !== null && onPatch) onPatch('valuation_assumptions.failure_probability', v);
+              }}
               tooltip={user('Probability of failure over the DCF horizon', 'Default = 0%. Analyst sets based on bond rating, cash-burn runway, or distress flags. See cumulative default rates below for rating-based benchmarks.')} />
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="Proceeds as % of book value if failure" />
-            <SpreadsheetCell type="hypothesis" value={proceedsPct} editable
+            <SpreadsheetCell type="hypothesis" value={(proceedsPct * 100).toFixed(2) + '%'} editable
+              onChange={(raw) => {
+                const v = parsePct(raw);
+                if (v !== null && onPatch) onPatch('valuation_assumptions.distress_proceeds_pct', v);
+              }}
               tooltip={user('Distress sale proceeds fraction', 'Default 50%. Liquidation recovery rate on assets in failure. 0% if you believe assets will be worthless.')} />
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="Failure tie-to (Book value / fair Value)" />
             <SpreadsheetCell type="hypothesis" value={data.inputs.valuation_assumptions.failure_tie_to} editable
+              onChange={(raw) => {
+                const v = raw.trim().toUpperCase();
+                if ((v === 'B' || v === 'V') && onPatch) onPatch('valuation_assumptions.failure_tie_to', v);
+              }}
               tooltip={user('What to tie failure proceeds to', '"B" = book value of capital; "V" = estimated fair value. Default V.')} />
           </tr>
         </tbody>

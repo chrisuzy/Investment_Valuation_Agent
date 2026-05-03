@@ -1,20 +1,25 @@
 import { NavLink } from 'react-router-dom';
 
+// Order reflects the valuation workflow: inputs → adjustments & WACC → outputs → cross-checks.
 const NAV = [
+  // Inputs & data prep
   { to: '/',                  label: '1. Input Sheet' },
-  { to: '/summary',           label: '2. Summary Sheet' },
-  { to: '/valuation-output',  label: '3. Valuation Output' },
-  { to: '/relative',          label: '4. Relative Valuation' },
-  { to: '/stories',           label: '5. Stories to Numbers' },
-  { to: '/picture',           label: '6. Valuation as Picture' },
-  { to: '/diagnostics',       label: '7. Diagnostics' },
+  { to: '/ttm',               label: '2. Trailing 12 Month' },
+  // Adjustments & Cost of Capital
+  { to: '/rd',                label: '3. R&D Converter' },
+  { to: '/leases',            label: '4. Lease Converter' },
+  { to: '/rating',            label: '5. Synthetic Rating' },
+  { to: '/wacc',              label: '6. Cost of Capital' },
+  { to: '/failure',           label: '7. Failure Rate' },
   { to: '/options',           label: '8. Option Value' },
-  { to: '/rating',            label: '9. Synthetic Rating' },
-  { to: '/rd',                label: '10. R&D Converter' },
-  { to: '/leases',            label: '11. Lease Converter' },
-  { to: '/wacc',              label: '12. Cost of Capital' },
-  { to: '/failure',           label: '13. Failure Rate' },
-  { to: '/ttm',               label: '14. Trailing 12 Month' },
+  // Valuation output
+  { to: '/valuation-output',  label: '9. Valuation Output' },
+  { to: '/summary',           label: '10. Summary Sheet' },
+  { to: '/stories',           label: '11. Stories to Numbers' },
+  { to: '/picture',           label: '12. Valuation as Picture' },
+  // Cross-checks & references
+  { to: '/relative',          label: '13. Relative Valuation' },
+  { to: '/diagnostics',       label: '14. Diagnostics' },
   { to: '/answers',           label: '15. Answer Keys' },
 ];
 

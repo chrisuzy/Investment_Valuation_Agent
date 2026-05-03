@@ -273,9 +273,15 @@ class OverrideRequest(BaseModel):
     """PATCH body: partial overrides to recompute.
 
     Keys are dot-paths like "macro_inputs.risk_free_rate" or
-    "valuation_assumptions.high_growth_years".
+    "valuation_assumptions.high_growth_years". Values can be scalars or
+    structured objects — e.g. overriding
+    "methodology_choices.geographic_segments" requires a list of segment
+    dicts, each carrying its own `resolution` object for the user's
+    manual country/region mapping.
     """
-    overrides: dict[str, float | int | str | bool | None]
+    # Accept any JSON-serializable value. Pydantic will coerce nested
+    # structures when CompanyValuationInput is rebuilt in patch_valuation.
+    overrides: dict[str, object | None]
 
 
 def _report_to_dict(session) -> dict:

@@ -217,7 +217,7 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
       {/* ----------------------------------------------------------------- */}
       {/* Section 2 — Base Year Financials */}
       {/* ----------------------------------------------------------------- */}
-      <SpreadsheetGrid title="2. Base Year Financials">
+      <SpreadsheetGrid title={`2. Base Year Financials (${inp.reporting_currency ?? '—'}, in millions)`}>
         <thead>
           <tr>
             <SpreadsheetCell value="" type="header" width="200px" />
@@ -425,10 +425,10 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
       {/* ----------------------------------------------------------------- */}
       {/* Section 5 — Market Data (current only) */}
       {/* ----------------------------------------------------------------- */}
-      <SpreadsheetGrid title="5. Market Data">
+      <SpreadsheetGrid title={`5. Market Data (priced in listing currency: ${inp.stock_price_currency ?? '—'})`}>
         <tbody>
-          <tr><SpreadsheetCell value="Current Stock Price" type="label" width="200px" /><SpreadsheetCell value={dec(fin0?.stock_price)} type="financial" tooltip={`=CIQ("${inp.ticker}","IQ_CLOSEPRICE")`} /></tr>
-          <tr><SpreadsheetCell value="Market Cap" type="label" /><SpreadsheetCell value={num(fin0?.mv_equity)} type="financial" tooltip={`=CIQ("${inp.ticker}","IQ_MARKETCAP")`} /></tr>
+          <tr><SpreadsheetCell value={`Current Stock Price (${inp.stock_price_currency ?? '—'})`} type="label" width="240px" /><SpreadsheetCell value={dec(fin0?.stock_price)} type="financial" tooltip={`=CIQ("${inp.ticker}","IQ_CLOSEPRICE") — quoted in the exchange's listing currency`} /></tr>
+          <tr><SpreadsheetCell value={`Market Cap (${inp.stock_price_currency ?? '—'}, millions)`} type="label" /><SpreadsheetCell value={num(fin0?.mv_equity)} type="financial" tooltip={`=CIQ("${inp.ticker}","IQ_MARKETCAP") — listing-currency market cap. For FX-conversion to reporting currency see stock_price_reporting/mv_equity_reporting.`} /></tr>
         </tbody>
       </SpreadsheetGrid>
 
@@ -658,9 +658,9 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
               ['ROIC', cm?.roic, ind.roic, indGlobal?.roic, 'pct', `EVA${fSuffix}.xls`, 'EVAGlobal.xls'],
               ['Std Dev Stock', cm?.std_dev_stock, ind.std_dev_stock, indGlobal?.std_dev_stock, 'pct', `EVA${fSuffix}.xls`, 'EVAGlobal.xls'],
               ['WACC', cm?.cost_of_capital, ind.wacc, indGlobal?.wacc, 'pct', `wacc${fSuffix}.xls`, 'waccGlobal.xls'],
-              ['EV/EBITDA', null, ind.ev_ebitda, indGlobal?.ev_ebitda, 'dec', `vebitda${fSuffix}.xls`, 'vebitdaGlobal.xls'],
-              ['PE Ratio', null, ind.pe_ratio, indGlobal?.pe_ratio, 'dec', fSuffix ? `pe${fSuffix}.xls` : 'pedata.xls', 'peGlobal.xls'],
-              ['PBV Ratio', null, ind.pbv_ratio, indGlobal?.pbv_ratio, 'dec', fSuffix ? `pbv${fSuffix}.xls` : 'pbvdata.xls', 'pbvGlobal.xls'],
+              ['EV/EBITDA', data.multiples?.ev_ebitda_intrinsic, ind.ev_ebitda, indGlobal?.ev_ebitda, 'dec', `vebitda${fSuffix}.xls`, 'vebitdaGlobal.xls'],
+              ['PE Ratio', data.multiples?.pe_ratio_market ?? data.multiples?.pe_ratio_intrinsic, ind.pe_ratio, indGlobal?.pe_ratio, 'dec', fSuffix ? `pe${fSuffix}.xls` : 'pedata.xls', 'peGlobal.xls'],
+              ['PBV Ratio', data.multiples?.pbv_ratio_intrinsic, ind.pbv_ratio, indGlobal?.pbv_ratio, 'dec', fSuffix ? `pbv${fSuffix}.xls` : 'pbvdata.xls', 'pbvGlobal.xls'],
             ];
             return rows.map(([label, company, regional, global_, fmt, srcRegional, srcGlobal]) => (
               <tr key={`cmp-${label}`}>

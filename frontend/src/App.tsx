@@ -111,7 +111,7 @@ export default function App() {
               <Route path="/rd"                element={<RDConverter data={data} sessionId={sessionId} />} />
               <Route path="/leases"            element={<LeaseConverter data={data} sessionId={sessionId} />} />
               <Route path="/wacc"              element={<CostOfCapital data={data} sessionId={sessionId} onPatch={handleCellUpdate} setData={setData} />} />
-              <Route path="/failure"           element={<FailureRate data={data} sessionId={sessionId} />} />
+              <Route path="/failure"           element={<FailureRate data={data} sessionId={sessionId} onPatch={handleCellUpdate} />} />
               <Route path="/ttm"               element={<TrailingTwelveMonth data={data} sessionId={sessionId} />} />
               <Route path="/answers"           element={<AnswerKeys data={data} sessionId={sessionId} />} />
             </Routes>

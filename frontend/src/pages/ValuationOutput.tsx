@@ -240,7 +240,7 @@ export default function ValuationOutput({ data, sessionId }: { data: ValuationRe
 
       {/* ===== Section 1: Projection Table ===== */}
       <div className="overflow-x-auto">
-        <SpreadsheetGrid title="Projection Table">
+        <SpreadsheetGrid title={`Projection Table (${data.inputs.reporting_currency ?? '—'}, in millions)`}>
           <thead>
             <tr>
               <SpreadsheetCell value="" type="header" width="180px" />
@@ -281,7 +281,7 @@ export default function ValuationOutput({ data, sessionId }: { data: ValuationRe
       </div>
 
       {/* ===== Section 2: Value Bridge ===== */}
-      <SpreadsheetGrid title="Value Bridge">
+      <SpreadsheetGrid title={`Value Bridge (${data.inputs.reporting_currency ?? '—'}, in millions — per-share figures on final row)`}>
         <tbody>
           {bridgeRow('Terminal cash flow', terminalCF,
             'FCFF in year 10. If override_growth_perpetuity is set, FCFF is adjusted for post-yr-10 growth rate.')}

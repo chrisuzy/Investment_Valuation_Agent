@@ -178,8 +178,8 @@ export default function GeographicSegmentsPanel({ data, onPatch }: Props) {
               <th className="text-left px-2 py-1">Segment (from CIQ)</th>
               <th className="text-right px-2 py-1">Revenue</th>
               <th className="text-right px-2 py-1">% of total</th>
-              <th className="text-left px-2 py-1">Auto-resolver suggestion</th>
-              <th className="text-right px-2 py-1">Suggested ERP</th>
+              <th className="text-left px-2 py-1">Current mapping</th>
+              <th className="text-right px-2 py-1">ERP used</th>
               <th className="text-left px-2 py-1">Manual override</th>
             </tr>
           </thead>
@@ -205,6 +205,11 @@ export default function GeographicSegmentsPanel({ data, onPatch }: Props) {
                         {r?.mapped_to || "(unresolved)"}
                         {r?.mapped_kind === "composite" && ` (composite of ${r.members.length})`}
                       </span>
+                      {r?.source === "user" && (
+                        <span className="ml-1 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-semibold">
+                          user
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{fmtPct(r?.erp)}</td>
