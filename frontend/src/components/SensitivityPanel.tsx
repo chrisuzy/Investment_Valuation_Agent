@@ -201,38 +201,220 @@ export default function SensitivityPanel({ data, onPatch, onPatchMany }: Props) 
         </div>
       </div>
 
-      {/* ── Section 3: Archetype presets ── */}
-      <div className="border-t border-slate-200 bg-slate-50/50 px-4 py-3 rounded-b-md">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-[11px] font-semibold text-slate-700 uppercase tracking-wide">Story archetypes</div>
+      {/* ── Section 3: Archetype presets + Reset ──
+          Clicking an archetype applies its 8 values (user opted into that
+          behavior). A Reset button always reverts to the snapshot taken
+          when this session's data first loaded — so any manual hypothesis
+          work done BEFORE touching an archetype can always be recovered.
+          An optional comparison table below shows the selected archetype's
+          values next to the user's current inputs for context. */}
+      <ArchetypePanel
+        data={data}
+        rankedBars={rankedBars}
+        currentArchetypeId={currentArchetype}
+        onPatchMany={onPatchMany}
+        sessionId={sessionId}
+      />
+    </section>
+  );
+}
+
+// ── Archetype panel — click-to-apply + Reset-to-original ──────────────────
+//
+// Archetype cards DO apply their 8-driver presets on click (user explicitly
+// opted into that). To protect the user's manual hypothesis work, we
+// snapshot the 8 driver values once per session (first time the panel
+// mounts with a given sessionId). A "Reset to original" button patches
+// every driver back to the snapshot, so the initial hypothesis state is
+// always recoverable — no matter how many archetypes have been clicked
+// since.
+//
+// Snapshot lifecycle:
+//   - Taken on first render with a non-null sessionId.
+//   - Not re-taken on subsequent renders of the same session, even after
+//     archetype clicks or manual edits. (If the user edits manually and
+//     THEN clicks an archetype, Reset still goes all the way back to the
+//     very first state — matches the user's stated intent of getting back
+//     to "my initial input values".)
+//   - Cleared + retaken when sessionId changes (new upload / valuation).
+
+function ArchetypePanel({
+  data, rankedBars, currentArchetypeId, onPatchMany, sessionId,
+}: {
+  data: ValuationResponse;
+  rankedBars: SensitivityBar[];
+  currentArchetypeId: string | null;
+  onPatchMany?: (overrides: Record<string, PatchValue>) => void | Promise<void>;
+  sessionId?: string | null;
+}) {
+  // The 8 driver patch paths we manage.
+  const patchPaths: { path: string; driver: string }[] = useMemo(
+    () => rankedBars.map((b) => ({ path: b.patch_path, driver: b.driver })),
+    [rankedBars],
+  );
+
+  const snapshotRef = useRef<{
+    sid: string | null;
+    values: Record<string, number>;
+  } | null>(null);
+
+  // Take the snapshot once per session.
+  useEffect(() => {
+    if (!sessionId) return;
+    if (snapshotRef.current?.sid === sessionId) return;   // already snapshotted
+    if (patchPaths.length === 0) return;                   // tornado not yet loaded
+    const values: Record<string, number> = {};
+    for (const { path, driver } of patchPaths) {
+      values[path] = readDriverValue(data, driver);
+    }
+    snapshotRef.current = { sid: sessionId, values };
+    // Note: intentionally NOT dependent on `data` so later manual edits
+    // don't overwrite the snapshot. Snapshot is the state at entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, patchPaths]);
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = selectedId ? ARCHETYPES.find((a) => a.id === selectedId) ?? null : null;
+  const selectedPatch = useMemo(
+    () => (selected ? selected.build(data) : null),
+    [selected, data],
+  );
+
+  // Dirty = current values differ from snapshot (so Reset is meaningful).
+  const dirty = useMemo(() => {
+    const snap = snapshotRef.current?.values;
+    if (!snap) return false;
+    for (const { path, driver } of patchPaths) {
+      const cur = readDriverValue(data, driver);
+      const saved = snap[path];
+      if (saved == null) continue;
+      if (Math.abs(cur - saved) > 1e-9) return true;
+    }
+    return false;
+  }, [data, patchPaths]);
+
+  const applyArchetype = (a: typeof ARCHETYPES[number]) => {
+    if (!onPatchMany) return;
+    setSelectedId(a.id);
+    onPatchMany(a.build(data));
+  };
+
+  const reset = () => {
+    if (!onPatchMany || !snapshotRef.current) return;
+    setSelectedId(null);
+    onPatchMany({ ...snapshotRef.current.values });
+  };
+
+  return (
+    <div className="border-t border-slate-200 bg-slate-50/50 px-4 py-3 rounded-b-md">
+      <div className="flex items-center justify-between mb-2 gap-3">
+        <div>
+          <div className="text-[11px] font-semibold text-slate-700 uppercase tracking-wide">
+            Story archetypes
+          </div>
           <div className="text-[10px] text-slate-500">
-            Sets all 8 drivers to Damodaran's canonical values for that story
+            Click a card to apply its Damodaran values. Reset restores your original inputs.
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {ARCHETYPES.map((a) => (
+        <button
+          onClick={reset}
+          disabled={!dirty || !onPatchMany}
+          className={`shrink-0 px-3 py-1.5 text-xs rounded-md border transition-colors ${
+            dirty
+              ? 'bg-white text-slate-800 border-slate-400 hover:bg-slate-100'
+              : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+          }`}
+          title={
+            dirty
+              ? 'Revert all 8 drivers to the values present when you loaded this valuation'
+              : 'Your current dials already match the initial hypothesis values — nothing to reset'
+          }
+        >
+          ↺ Reset to original inputs
+        </button>
+      </div>
+
+      {/* Archetype row — click applies */}
+      <div className="flex flex-wrap gap-2">
+        {ARCHETYPES.map((a) => {
+          const isSelected = selectedId === a.id;
+          const isClosest = !isSelected && currentArchetypeId === a.id;
+          return (
             <button
               key={a.id}
-              onClick={() => {
-                if (!onPatchMany) return;
-                onPatchMany(a.build(data));
-              }}
-              className={`flex flex-col items-center justify-center min-w-[104px] px-3 py-2 rounded-md border text-xs transition-colors ${
-                currentArchetype === a.id
-                  ? 'bg-slate-900 text-white border-slate-900'
-                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-              }`}
-              title={`Load ${a.name} preset: ${a.tagline}`}
+              onClick={() => applyArchetype(a)}
               disabled={!onPatchMany}
+              className={`flex flex-col items-center justify-center min-w-[104px] px-3 py-2 rounded-md border text-xs transition-colors ${
+                isSelected
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : isClosest
+                    ? 'bg-emerald-50 text-emerald-900 border-emerald-400 hover:bg-emerald-100'
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+              } ${!onPatchMany ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title={isSelected
+                ? `${a.name} values currently applied — Reset to go back to your originals`
+                : `Apply ${a.name}: ${a.tagline}. Reset always available.`
+              }
             >
               <span className="text-base leading-none mb-1">{a.emoji}</span>
               <span className="font-semibold">{a.name}</span>
-              <span className={`text-[10px] mt-0.5 ${currentArchetype === a.id ? 'text-slate-300' : 'text-slate-500'}`}>{a.tagline}</span>
+              <span className={`text-[10px] mt-0.5 ${
+                isSelected ? 'text-slate-300' : isClosest ? 'text-emerald-700' : 'text-slate-500'
+              }`}>
+                {isClosest ? 'matches your dials' : a.tagline}
+              </span>
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
-    </section>
+
+      {/* Comparison table — shows the selected archetype's values against
+          both your current and your original snapshot, so the Reset
+          destination is always visible. */}
+      {selected && selectedPatch && (
+        <div className="mt-3 bg-white border border-slate-200 rounded-md overflow-hidden">
+          <div className="px-3 py-2 bg-slate-100 border-b border-slate-200 text-[11px] text-slate-700">
+            <span className="font-semibold">{selected.emoji} {selected.name}</span>
+            <span className="ml-2 text-slate-500">applied — compare your current vs original below</span>
+          </div>
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="bg-slate-50 text-slate-600">
+                <th className="text-left px-3 py-1.5 font-normal">Driver</th>
+                <th className="text-right px-3 py-1.5 font-normal">Original (your input)</th>
+                <th className="text-right px-3 py-1.5 font-normal">Current (after apply)</th>
+                <th className="text-right px-3 py-1.5 font-normal">Δ vs original</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rankedBars.map((bar) => {
+                const current = readDriverValue(data, bar.driver);
+                const orig = snapshotRef.current?.values[bar.patch_path];
+                const meta = getDriverMeta(bar, data.inputs.industry_data);
+                const delta = orig != null ? current - orig : null;
+                const sign = delta == null ? '' : delta > 0 ? '+' : delta < 0 ? '−' : '';
+                return (
+                  <tr key={bar.driver} className="border-t border-slate-100">
+                    <td className="px-3 py-1 text-slate-700">{bar.label}</td>
+                    <td className="px-3 py-1 text-right tabular-nums text-slate-600">
+                      {orig != null ? meta.display(orig) : '—'}
+                    </td>
+                    <td className="px-3 py-1 text-right tabular-nums text-slate-900 font-semibold">
+                      {meta.display(current)}
+                    </td>
+                    <td className={`px-3 py-1 text-right tabular-nums text-[10px] ${
+                      delta == null ? 'text-slate-400' : delta > 0 ? 'text-emerald-700' : delta < 0 ? 'text-rose-700' : 'text-slate-400'
+                    }`}>
+                      {delta == null || Math.abs(delta) < 1e-9 ? '—' : sign + meta.display(Math.abs(delta)).replace(/^[+−-]/, '')}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
