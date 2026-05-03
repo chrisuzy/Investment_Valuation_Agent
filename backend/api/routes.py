@@ -834,7 +834,18 @@ async def fetch_from_file(
             ),
         ))
 
-    methodology = MethodologyChoices(geographic_segments=geo_segments_input)
+    # Actual credit rating from CIQ — when present and valid, auto-switch
+    # kd_approach to 'actual_rating' so the WACC uses the rating-implied
+    # spread. Empty / NA / zero → leave kd_approach at its default, user
+    # can still override via the WACC-page dropdown.
+    rating_raw = current.get("actual_rating") if current else None
+    parsed_rating = _clean_rating(rating_raw)
+
+    methodology_kwargs: dict = {"geographic_segments": geo_segments_input}
+    if parsed_rating is not None:
+        methodology_kwargs["actual_rating"] = parsed_rating
+        methodology_kwargs["kd_approach"] = "actual_rating"
+    methodology = MethodologyChoices(**methodology_kwargs)
 
     inputs = CompanyValuationInput(
         ticker=ticker,
@@ -890,6 +901,89 @@ def _fval_or_none(data: dict, key: str) -> float | None:
     """Get float value from dict, or None."""
     v = data.get(key)
     return float(v) if isinstance(v, (int, float)) else None
+
+
+# S&P label → compound Moody's/S&P key used by the module_2_risk rating
+# spread table. CIQ's IQ_SP_ISSUER_RATING returns S&P labels ("A+",
+# "BBB-", ...) — we map them to the table's compound form so
+# `_rating_to_spread` returns a real number. The compound keys are the
+# closest-neighbor buckets from Damodaran's published rating-to-spread
+# lookup, so sub-labels ("AA+" / "AA-") snap to their nearest canonical
+# bucket ("AA") rather than failing.
+_SP_TO_COMPOUND: dict[str, str] = {
+    "AAA":  "Aaa/AAA",
+    "AA+":  "Aaa/AAA",   # nearest bucket
+    "AA":   "Aa2/AA",
+    "AA-":  "Aa2/AA",
+    "A+":   "A1/A+",
+    "A":    "A2/A",
+    "A-":   "A3/A-",
+    "BBB+": "A3/A-",     # nearest
+    "BBB":  "Baa2/BBB",
+    "BBB-": "Baa2/BBB",
+    "BB+":  "Ba1/BB+",
+    "BB":   "Ba2/BB",
+    "BB-":  "Ba2/BB",
+    "B+":   "B1/B+",
+    "B":    "B2/B",
+    "B-":   "B3/B-",
+    "CCC+": "Caa/CCC",
+    "CCC":  "Caa/CCC",
+    "CCC-": "Caa/CCC",
+    "CC":   "Ca2/CC",
+    "C":    "C2/C",
+    "D":    "D2/D",
+}
+# Moody's labels → same compound key (for CIQ responses that lead with Moody's)
+_MOODYS_TO_COMPOUND: dict[str, str] = {
+    "Aaa":  "Aaa/AAA",
+    "Aa1":  "Aaa/AAA",
+    "Aa2":  "Aa2/AA", "Aa3":  "Aa2/AA",
+    "A1":   "A1/A+",  "A2":   "A2/A", "A3": "A3/A-",
+    "Baa1": "A3/A-",  "Baa2": "Baa2/BBB", "Baa3": "Baa2/BBB",
+    "Ba1":  "Ba1/BB+", "Ba2": "Ba2/BB", "Ba3": "Ba2/BB",
+    "B1":   "B1/B+",  "B2":   "B2/B", "B3": "B3/B-",
+    "Caa1": "Caa/CCC", "Caa2": "Caa/CCC", "Caa3": "Caa/CCC",
+    "Ca":   "Ca2/CC",
+    # ("C" is intentionally resolved via the S&P table above so
+    # "C" from CIQ maps to "C2/C" rather than being ambiguous.)
+}
+
+
+def _clean_rating(raw) -> str | None:
+    """Normalize a CIQ `IQ_SP_ISSUER_RATING` value into a compound rating
+    bucket key (e.g. ``"Baa2/BBB"``) accepted by the module_2 spread table.
+
+    Returns None when the cell is empty, numeric zero, a sentinel string
+    like ``NR`` / ``NA`` / ``-``, or anything else we don't recognize —
+    so the WACC branch falls back to the user's dropdown selection.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)) and raw == 0:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    if s.upper() in {"NA", "N/A", "NR", "NOT RATED", "-", "—", "0"}:
+        return None
+    # Strip vendor prefix like "S&P: BB+" → "BB+"
+    if ":" in s:
+        s = s.split(":", 1)[1].strip()
+    # Direct lookup (S&P side — exact case)
+    if s in _SP_TO_COMPOUND:
+        return _SP_TO_COMPOUND[s]
+    if s in _MOODYS_TO_COMPOUND:
+        return _MOODYS_TO_COMPOUND[s]
+    # Case-insensitive S&P match (CIQ may return lowercase)
+    for label, compound in _SP_TO_COMPOUND.items():
+        if label.lower() == s.lower():
+            return compound
+    # Moody's with a trailing "+" / "-" may arrive as "Baa1+" — strip and retry
+    stripped = s.rstrip("+-")
+    if stripped in _MOODYS_TO_COMPOUND:
+        return _MOODYS_TO_COMPOUND[stripped]
+    return None
 
 
 @router.get("/industries")

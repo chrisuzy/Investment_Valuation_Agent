@@ -95,9 +95,14 @@ export default function OnboardingWizard({ onComplete, onDemo }: Props) {
   }
 
   // ── step 4: upload ──
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  async function handleFile(file: File) {
     if (!file) return;
+    // Reject non-Excel files up front — saves a round-trip.
+    const okExt = /\.(xlsx|xls)$/i.test(file.name);
+    if (!okExt) {
+      setError('Please upload a .xlsx or .xls file.');
+      return;
+    }
     setUploading(true);
     setError(null);
     try {
@@ -114,6 +119,13 @@ export default function OnboardingWizard({ onComplete, onDemo }: Props) {
       setUploading(false);
     }
   }
+
+  const handleUploadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+    // Reset the input so re-uploading the same file fires onChange again.
+    e.target.value = '';
+  };
 
   function goBack(target: Step) {
     setStep(target);
@@ -202,13 +214,14 @@ export default function OnboardingWizard({ onComplete, onDemo }: Props) {
             onBack={() => goBack(2)}
           />
         )}
-        {step === 4 && selectedCompany && (
+        {step === 4 && (
           <StepFour
             company={selectedCompany}
             uploading={uploading}
             fileInputRef={fileInputRef}
-            onUpload={handleUpload}
-            onBack={() => goBack(3)}
+            onUploadChange={handleUploadChange}
+            onDropFile={handleFile}
+            onBack={() => goBack(selectedCompany ? 3 : 1)}
           />
         )}
       </div>
@@ -531,14 +544,42 @@ function StepThree({
 // Step 4 — Upload
 // ──────────────────────────────────────────────────────────────────────
 function StepFour({
-  company, uploading, fileInputRef, onUpload, onBack,
+  company, uploading, fileInputRef, onUploadChange, onDropFile, onBack,
 }: {
-  company: SearchResult;
+  /** Null when the user jumped directly to upload via the "skip" shortcut. */
+  company: SearchResult | null;
   uploading: boolean;
   fileInputRef: React.RefObject<HTMLInputElement>;
-  onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onDropFile: (file: File) => void;
   onBack: () => void;
 }) {
+  const [dragging, setDragging] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();            // mandatory — else browser opens the file
+    e.stopPropagation();
+    if (!dragging) setDragging(true);
+  };
+  const handleDragLeave = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragging(false);
+  };
+  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) onDropFile(file);
+  };
+
+  const zoneState = uploading
+    ? 'border-blue-400 bg-blue-50'
+    : dragging
+      ? 'border-blue-600 bg-blue-100'
+      : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50/50';
+
   return (
     <div className="p-6 space-y-4">
       <div>
@@ -550,25 +591,33 @@ function StepFour({
         </p>
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
-        <span className="font-semibold">Uploading for:</span>{' '}
-        {company.company_name} <span className="font-mono text-blue-700">({company.exchange_ticker})</span>
-      </div>
+      {company ? (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
+          <span className="font-semibold">Uploading for:</span>{' '}
+          {company.company_name} <span className="font-mono text-blue-700">({company.exchange_ticker})</span>
+        </div>
+      ) : (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
+          <span className="font-semibold">Skip-to-upload mode.</span>{' '}
+          No company pre-selected — the backend will read the ticker from cell <code className="font-mono">B1</code> of
+          your <code className="font-mono">CIQ_Fetch_Template.xlsx</code>.
+        </div>
+      )}
 
       <label
         htmlFor="upload-filled-xlsx"
-        className={`block border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition ${
-          uploading
-            ? 'border-blue-400 bg-blue-50'
-            : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50/50'
-        }`}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`block border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition ${zoneState}`}
       >
         <input
           ref={fileInputRef}
           id="upload-filled-xlsx"
           type="file"
           accept=".xlsx,.xls"
-          onChange={onUpload}
+          onChange={onUploadChange}
           disabled={uploading}
           className="hidden"
         />
@@ -577,6 +626,11 @@ function StepFour({
             <div className="text-4xl mb-2">⏳</div>
             <div className="text-sm font-semibold text-blue-900">Parsing + valuing…</div>
             <div className="text-xs text-blue-600 mt-1">This usually takes 2–5 seconds.</div>
+          </>
+        ) : dragging ? (
+          <>
+            <div className="text-4xl mb-2">📥</div>
+            <div className="text-sm font-semibold text-blue-900">Release to upload</div>
           </>
         ) : (
           <>

@@ -73,6 +73,10 @@ MARKET_FIELDS = [
     CIQField("reporting_currency",     "IQ_FILING_CURRENCY", description="Filing/Reporting Currency"),
     CIQField("primary_exchange",       "IQ_EXCHANGE",        description="Primary Exchange Listing"),
     CIQField("effective_tax_rate_ciq", "IQ_EFFECT_TAX_RATE", description="Effective Tax Rate (CIQ, in %)"),
+    # S&P issuer rating — when present, Cost of Capital auto-switches to the
+    # actual_rating kd_approach and looks up the appropriate default spread.
+    # Empty / NA / 0 → falls through to the industry / synthetic-rating path.
+    CIQField("actual_rating",          "IQ_SP_ISSUER_RATING", description="S&P Issuer Credit Rating"),
 ]
 
 # ──────────────────────────────────────────────────────────────

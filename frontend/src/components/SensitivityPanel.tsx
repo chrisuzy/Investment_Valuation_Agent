@@ -153,7 +153,7 @@ export default function SensitivityPanel({ data, onPatch, onPatchMany }: Props) 
           </div>
           <div className="space-y-1.5">
             {rankedBars.map((bar, rank) => (
-              <DriverSlider
+              <DriverInput
                 key={bar.driver}
                 rank={rank + 1}
                 bar={bar}
@@ -320,9 +320,14 @@ function Tornado({ bars, baseline, currency }: { bars: SensitivityBar[]; baselin
   );
 }
 
-// ── Driver slider ─────────────────────────────────────────────────────────
+// ── Driver input row ──────────────────────────────────────────────────────
+//
+// Replaces the earlier slider design: a number input box (direct edit or
+// step arrows), auto-populated from the currently-committed value, with the
+// industry Q1 / median / Q3 shown compactly next to it as reference numbers
+// instead of as tick marks on a slider axis.
 
-function DriverSlider({
+function DriverInput({
   rank, bar, data, industry, currentValue, onChange,
 }: {
   rank: number;
@@ -332,83 +337,101 @@ function DriverSlider({
   currentValue: number;
   onChange: (v: number) => void;
 }) {
-  // Map the driver's patch_path back to a display format and industry reference
   const meta = useMemo(() => getDriverMeta(bar, industry), [bar, industry]);
-
-  // Slider bounds are INDEPENDENT of the industry sweep range. The tornado
-  // sweep uses industry Q1/Q3 (or canonical Damodaran ranges) purely for
-  // ranking purposes; the slider itself needs to move well beyond those
-  // bounds for cases like a firm running at 4% operating margin when the
-  // industry median is 20%. Industry Q1/median/Q3 tick marks stay on the
-  // track as visual reference only.
   const wide = getDriverWideBounds(bar.driver, data);
-  const sliderMin = wide.min;
-  const sliderMax = wide.max;
-  const span = sliderMax - sliderMin;
 
-  const pct = percentile(currentValue, bar.range_lo, (bar.range_lo + bar.range_hi) / 2, bar.range_hi);
+  // Draft string tracks what the user is typing; only commits on blur /
+  // enter / arrow-click so the backend isn't hammered per keystroke.
+  const [draft, setDraft] = useState<string>(() => meta.edit(currentValue));
+  useEffect(() => { setDraft(meta.edit(currentValue)); }, [currentValue, meta]);
+
+  const median = (bar.range_lo + bar.range_hi) / 2;
+  const pct = percentile(currentValue, bar.range_lo, median, bar.range_hi);
+
+  const commit = (raw: string) => {
+    const parsed = meta.parse(raw);
+    if (parsed == null) { setDraft(meta.edit(currentValue)); return; }
+    const clamped = Math.max(wide.min, Math.min(wide.max, parsed));
+    setDraft(meta.edit(clamped));
+    if (clamped !== currentValue) onChange(clamped);
+  };
+
+  const step = (direction: 1 | -1) => {
+    const next = +(currentValue + direction * meta.arrowStep).toFixed(6);
+    const clamped = Math.max(wide.min, Math.min(wide.max, next));
+    if (clamped !== currentValue) onChange(clamped);
+  };
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded">
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded">
       <span className="inline-block bg-slate-900 text-white text-[10px] font-bold px-1.5 py-0.5 rounded min-w-[26px] text-center">
         #{rank}
       </span>
-      <span className="text-xs text-slate-700 font-medium w-[148px] truncate">{bar.label}</span>
-      <div className="flex-1 relative h-4">
-        {/* industry markers */}
-        <div className="absolute inset-x-0 top-1.5 h-1 bg-slate-200 rounded" />
-        <MarkerTick pos={(bar.range_lo - sliderMin) / span} color="#94a3b8" label="Q1" />
-        <MarkerTick pos={((bar.range_lo + bar.range_hi) / 2 - sliderMin) / span} color="#334155" label="med" bold />
-        <MarkerTick pos={(bar.range_hi - sliderMin) / span} color="#94a3b8" label="Q3" />
-        <input
-          type="range"
-          min={sliderMin}
-          max={sliderMax}
-          step={meta.step}
-          value={currentValue}
-          onChange={(e) => onChange(parseFloat(e.target.value))}
-          className="absolute inset-0 w-full opacity-0 cursor-pointer"
-          style={{ zIndex: 2 }}
-        />
-        <div
-          className="absolute top-1 h-2 bg-sky-500 rounded"
-          style={{
-            left: 0,
-            width: `${Math.max(0, Math.min(1, (currentValue - sliderMin) / span)) * 100}%`,
-          }}
-        />
-        <div
-          className="absolute top-0 w-3 h-4 bg-sky-600 rounded-sm border-2 border-white shadow pointer-events-none"
-          style={{
-            left: `calc(${Math.max(0, Math.min(1, (currentValue - sliderMin) / span)) * 100}% - 6px)`,
-          }}
-        />
-      </div>
-      <span className="min-w-[56px] text-right text-xs font-semibold text-slate-900 bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5 tabular-nums">
-        {meta.format(currentValue)}
+      <span className="text-xs text-slate-700 font-medium w-[148px] truncate" title={bar.label}>
+        {bar.label}
       </span>
-      <span className="w-10 text-right text-[10px] text-slate-500 tabular-nums">
-        {bar.range_source === 'industry_q1_q3' && pct != null ? `p${Math.round(pct)}` : 'n/a'}
+
+      {/* Editable input + arrow buttons */}
+      <div className="flex items-center">
+        <input
+          type="text"
+          inputMode="decimal"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={(e) => commit(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); step(1); }
+            else if (e.key === 'ArrowDown') { e.preventDefault(); step(-1); }
+          }}
+          className="w-[84px] text-right text-xs font-semibold text-slate-900 bg-white border border-slate-300 rounded-l px-2 py-0.5 tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
+          aria-label={`${bar.label} value`}
+        />
+        <div className="flex flex-col border border-l-0 border-slate-300 rounded-r overflow-hidden">
+          <button
+            type="button"
+            onClick={() => step(1)}
+            className="px-1 text-[9px] leading-none h-[13px] bg-white text-slate-600 hover:bg-slate-200 border-b border-slate-200"
+            aria-label="Increase"
+            title={`+${meta.arrowLabel}`}
+          >▲</button>
+          <button
+            type="button"
+            onClick={() => step(-1)}
+            className="px-1 text-[9px] leading-none h-[13px] bg-white text-slate-600 hover:bg-slate-200"
+            aria-label="Decrease"
+            title={`−${meta.arrowLabel}`}
+          >▼</button>
+        </div>
+      </div>
+
+      {/* Industry reference — numbers, not tick marks */}
+      <div className="flex-1 flex items-center gap-2 text-[10px] text-slate-500 tabular-nums pl-1 overflow-hidden">
+        {bar.range_source === 'industry_q1_q3' ? (
+          <>
+            <ReferenceChip label="Q1"  value={meta.display(bar.range_lo)} />
+            <ReferenceChip label="med" value={meta.display(median)} emphasis />
+            <ReferenceChip label="Q3"  value={meta.display(bar.range_hi)} />
+          </>
+        ) : (
+          <span className="text-slate-400 italic text-[10px]">no industry data</span>
+        )}
+      </div>
+
+      {/* Percentile chip — narrow, right-aligned */}
+      <span className="w-9 text-right text-[10px] text-slate-500 tabular-nums">
+        {bar.range_source === 'industry_q1_q3' && pct != null ? `p${Math.round(pct)}` : ''}
       </span>
     </div>
   );
 }
 
-function MarkerTick({ pos, color, label, bold = false }: { pos: number; color: string; label: string; bold?: boolean }) {
-  const left = `${Math.max(0, Math.min(1, pos)) * 100}%`;
+function ReferenceChip({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
   return (
-    <>
-      <div
-        className="absolute top-0 w-[1.5px] h-3 pointer-events-none"
-        style={{ left, backgroundColor: color, height: bold ? '14px' : '10px', top: bold ? '-1px' : '1px' }}
-      />
-      <span
-        className="absolute text-[8.5px] pointer-events-none"
-        style={{ left, color, transform: 'translate(-50%, 14px)' }}
-      >
-        {label}
-      </span>
-    </>
+    <span className={`inline-flex items-baseline gap-0.5 ${emphasis ? 'text-slate-700 font-semibold' : 'text-slate-500'}`}>
+      <span className="text-[9px] uppercase tracking-wide text-slate-400">{label}</span>
+      <span className="text-[10px] tabular-nums">{value}</span>
+    </span>
   );
 }
 
@@ -439,8 +462,39 @@ function ImpactCard({ label, value, subtle, accent = 'slate' }: {
 // ── Driver metadata helpers ────────────────────────────────────────────────
 
 interface DriverMeta {
-  step: number;
-  format: (v: number) => string;
+  /** Increment applied by the ▲/▼ arrow buttons. */
+  arrowStep: number;
+  /** Short label shown in arrow button tooltip (e.g. "0.5%"). */
+  arrowLabel: string;
+  /** Full formatted value for display (e.g. "22.00%"). */
+  display: (v: number) => string;
+  /** Short formatted value used in the edit input itself (e.g. "22"). */
+  edit: (v: number) => string;
+  /** Parse the user's typed string back to a number. Returns null on junk. */
+  parse: (raw: string) => number | null;
+}
+
+/** Parse "22" / "22%" / "0.22" / " 0.22 " → 0.22 for percentage drivers. */
+function parsePct(raw: string): number | null {
+  const cleaned = raw.replace(/[,\s%]/g, '').trim();
+  if (!cleaned) return null;
+  const n = parseFloat(cleaned);
+  if (isNaN(n)) return null;
+  // Heuristic: if the user typed a value > 1, they meant percent points.
+  return Math.abs(n) > 1 ? n / 100 : n;
+}
+function parseNum(raw: string): number | null {
+  const cleaned = raw.replace(/[,\s]/g, '').trim();
+  if (!cleaned) return null;
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? null : n;
+}
+function parseBps(raw: string): number | null {
+  // accept "50", "50bp", "50 bps", "+50"
+  const cleaned = raw.replace(/[,\s]|bps?/gi, '').trim();
+  if (!cleaned) return null;
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? null : n;
 }
 
 function getDriverMeta(bar: SensitivityBar, _industry: ValuationResponse['inputs']['industry_data']): DriverMeta {
@@ -450,15 +504,40 @@ function getDriverMeta(bar: SensitivityBar, _industry: ValuationResponse['inputs
     case 'growth_perpetuity_rate':
     case 'target_operating_margin':
     case 'failure_probability':
-      return { step: 0.005, format: (v) => `${(v * 100).toFixed(2)}%` };
+      return {
+        arrowStep: 0.005, arrowLabel: '0.50%',
+        display: (v) => `${(v * 100).toFixed(2)}%`,
+        edit:    (v) => `${(v * 100).toFixed(2)}%`,
+        parse:   parsePct,
+      };
     case 'margin_convergence_year':
-      return { step: 1, format: (v) => `${Math.round(v)}` };
+      return {
+        arrowStep: 1, arrowLabel: '1 yr',
+        display: (v) => `${Math.round(v)} yr`,
+        edit:    (v) => `${Math.round(v)}`,
+        parse:   parseNum,
+      };
     case 'sales_to_capital_high':
-      return { step: 0.1, format: (v) => v.toFixed(2) };
+      return {
+        arrowStep: 0.1, arrowLabel: '0.1×',
+        display: (v) => `${v.toFixed(2)}×`,
+        edit:    (v) => v.toFixed(2),
+        parse:   parseNum,
+      };
     case 'wacc_level_shift_bps':
-      return { step: 10, format: (v) => `${v >= 0 ? '+' : ''}${Math.round(v)}bp` };
+      return {
+        arrowStep: 10, arrowLabel: '10 bps',
+        display: (v) => `${v >= 0 ? '+' : ''}${Math.round(v)} bps`,
+        edit:    (v) => `${Math.round(v)}`,
+        parse:   parseBps,
+      };
     default:
-      return { step: 0.01, format: (v) => v.toFixed(2) };
+      return {
+        arrowStep: 0.01, arrowLabel: '0.01',
+        display: (v) => v.toFixed(2),
+        edit:    (v) => v.toFixed(2),
+        parse:   parseNum,
+      };
   }
 }
 
