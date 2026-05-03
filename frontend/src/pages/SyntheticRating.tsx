@@ -3,6 +3,7 @@ import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
 import { ciq, formula, backendField } from '../lib/sources';
+import { baseYear } from '../lib/baseYear';
 
 // Interest coverage → rating lookup table (Damodaran small-firm)
 const RATING_TABLE = [
@@ -23,7 +24,7 @@ const RATING_TABLE = [
 ];
 
 export default function SyntheticRating({ data, sessionId }: { data: ValuationResponse; sessionId?: string | null }) {
-  const fin = data.inputs.raw_financials[0];
+  const fin = baseYear(data);                // LTM-rotated base year
   const ebit = data.adjusted?.adjusted_ebit ?? fin?.ebit ?? 0;
   const interest = fin?.interest_expense ?? 1;
   const coverage = interest > 0 ? ebit / interest : 999;

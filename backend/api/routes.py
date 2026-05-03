@@ -641,6 +641,13 @@ async def fetch_from_file(
         if fy_offset == 0:
             mv_listing   = _fval_or_none(data, "mv_equity")              # always listing ccy
             mv_reporting = _fval_or_none(data, "mv_equity_reporting")    # None if old template
+            # Fallback: derive reporting-currency mv_equity via the derived
+            # fx_rate when the CIQ template didn't supply mv_equity_reporting
+            # directly. Prevents the downstream currency-mixing bug where
+            # mv_for_math ends up in listing currency but bv_debt / cash stay
+            # in reporting, corrupting EV and the market multiples.
+            if mv_reporting is None and mv_listing is not None and fx_rate is not None:
+                mv_reporting = mv_listing * fx_rate
             mv_for_math  = mv_reporting if mv_reporting is not None else mv_listing
             sp_listing   = _fval_or_none(data, "stock_price")
             sp_reporting = _fval_or_none(data, "stock_price_reporting")

@@ -7,6 +7,7 @@ import SensitivityPanel from '../components/SensitivityPanel';
 import { ciq, formula, backendField, user } from '../lib/sources';
 import DualCurrency from '../components/DualCurrency';
 import { fmtMoneyShort } from '../lib/currency';
+import { baseYear, baseYearEbit } from '../lib/baseYear';
 
 // ---------- helpers ----------
 
@@ -38,7 +39,11 @@ interface Props {
 export default function ValuationOutput({ data, onPatch, onPatchMany }: Props) {
   const dcf = data.dcf;
   const inputs = data.inputs;
-  const fin0 = inputs.raw_financials[0]; // base-year financials
+  // LTM-rotated base year (falls back to raw_financials[0] when LTM absent).
+  // Critical for non-calendar-year filers so the "Base year" column matches
+  // what the engine's M3/M4 actually anchor on.
+  const fin0 = baseYear(data) ?? inputs.raw_financials[0];
+  const baseEbit = baseYearEbit(data) ?? 0;
   const assumptions = inputs.valuation_assumptions;
   const macro = inputs.macro_inputs;
 
@@ -71,9 +76,12 @@ export default function ValuationOutput({ data, onPatch, onPatchMany }: Props) {
     }
   }
 
-  // EBIT
+  // EBIT — base year uses Damodaran-adjusted EBIT (post R&D + lease
+  // capitalization). This matches what M4 uses as the starting point
+  // of the margin path, so there's no artificial cliff between the
+  // "Base year" column and Year 1.
   const ebit: (number | undefined)[] = Array(colCount).fill(undefined);
-  ebit[0] = fin0.ebit;
+  ebit[0] = baseEbit;
   if (dcf?.ebit_projections) {
     dcf.ebit_projections.forEach((v, i) => {
       ebit[i + 1] = v;

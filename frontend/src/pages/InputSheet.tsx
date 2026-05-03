@@ -425,10 +425,13 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
       {/* ----------------------------------------------------------------- */}
       {/* Section 5 — Market Data (current only) */}
       {/* ----------------------------------------------------------------- */}
-      <SpreadsheetGrid title={`5. Market Data (priced in listing currency: ${inp.stock_price_currency ?? '—'})`}>
+      <SpreadsheetGrid title={`5. Market Data`}>
         <tbody>
           <tr><SpreadsheetCell value={`Current Stock Price (${inp.stock_price_currency ?? '—'})`} type="label" width="240px" /><SpreadsheetCell value={dec(fin0?.stock_price)} type="financial" tooltip={`=CIQ("${inp.ticker}","IQ_CLOSEPRICE") — quoted in the exchange's listing currency`} /></tr>
-          <tr><SpreadsheetCell value={`Market Cap (${inp.stock_price_currency ?? '—'}, millions)`} type="label" /><SpreadsheetCell value={num(fin0?.mv_equity)} type="financial" tooltip={`=CIQ("${inp.ticker}","IQ_MARKETCAP") — listing-currency market cap. For FX-conversion to reporting currency see stock_price_reporting/mv_equity_reporting.`} /></tr>
+          <tr><SpreadsheetCell value={`Market Cap (${inp.reporting_currency ?? '—'}, millions)`} type="label" /><SpreadsheetCell value={num(fin0?.mv_equity)} type="financial" tooltip={`Market cap in reporting currency ${inp.reporting_currency ?? '—'} — used for WACC weights and the Price/Value comparison. When the CIQ template doesn't ship mv_equity_reporting directly, this is derived as mv_equity_listing × fx_rate.`} /></tr>
+          {fin0?.mv_equity_listing != null && inp.stock_price_currency && inp.stock_price_currency !== inp.reporting_currency && (
+            <tr><SpreadsheetCell value={`Market Cap (${inp.stock_price_currency}, millions)`} type="label" /><SpreadsheetCell value={num(fin0.mv_equity_listing)} type="financial" tooltip={`=CIQ("${inp.ticker}","IQ_MARKETCAP") — raw listing-currency market cap, preserved for broker-side comparison.`} /></tr>
+          )}
         </tbody>
       </SpreadsheetGrid>
 

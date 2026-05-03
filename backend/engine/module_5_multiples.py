@@ -47,7 +47,14 @@ def compute_multiples(
 
     ke = cost_of_capital.cost_of_equity
     wacc = cost_of_capital.wacc
-    tax_rate = macro.tax_rate_marginal
+    # Damodaran uses the EFFECTIVE tax rate for current-year intrinsic
+    # multiples (EV/Sales after-tax margin mirrors the firm's actual tax
+    # paid this year). Marginal is reserved for terminal / projections.
+    tax_rate = (
+        macro.tax_rate_effective
+        if macro.tax_rate_effective is not None
+        else macro.tax_rate_marginal
+    )
 
     rir_firm = cf_metrics.rir_firm
     rir_equity = cf_metrics.rir_equity

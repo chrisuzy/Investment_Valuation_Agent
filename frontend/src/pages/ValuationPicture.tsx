@@ -2,15 +2,19 @@ import type { ValuationResponse } from '../types/valuation';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
+import { baseYear, baseYearMargin } from '../lib/baseYear';
 
 export default function ValuationPicture({ data, sessionId }: { data: ValuationResponse; sessionId?: string | null }) {
-  const fin = data.inputs.raw_financials[0];
+  const fin = baseYear(data);                   // LTM-rotated base year
   const assumptions = data.inputs.valuation_assumptions;
   const dcf = data.dcf;
   const final_ = data.final;
   const coc = data.cost_of_capital;
 
   const baseRevenue = fin?.revenues ?? 0;
+  // Damodaran-adjusted margin (post R&D + lease capitalization). Matches
+  // what the engine uses as the starting point for the margin path.
+  const currentMargin = baseYearMargin(data) ?? 0;
   const terminalRevenue = dcf?.revenue_projections?.[dcf.revenue_projections.length - 1] ?? 0;
   const terminalEbit = dcf?.ebit_projections?.[dcf.ebit_projections.length - 1] ?? 0;
 
@@ -44,7 +48,7 @@ export default function ValuationPicture({ data, sessionId }: { data: ValuationR
         <tbody>
           <tr>
             <SpreadsheetCell type="label" value="Current EBIT margin" />
-            <SpreadsheetCell type="calc" value={baseRevenue > 0 ? (fin?.ebit ?? 0) / baseRevenue : 0} />
+            <SpreadsheetCell type="calc" value={currentMargin} />
             <SpreadsheetCell type="label" value="→ Target margin" />
             <SpreadsheetCell type="hypothesis" value={assumptions.target_operating_margin} />
             <SpreadsheetCell type="label" value="→ Converge year" />

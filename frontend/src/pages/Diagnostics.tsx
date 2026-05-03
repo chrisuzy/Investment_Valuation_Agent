@@ -2,9 +2,11 @@ import type { ValuationResponse } from '../types/valuation';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
+import { baseYear, priorYear, baseYearMargin } from '../lib/baseYear';
 
 export default function Diagnostics({ data, sessionId }: { data: ValuationResponse; sessionId?: string | null }) {
-  const fin = data.inputs.raw_financials;
+  const by = baseYear(data);
+  const py = priorYear(data);
   const assumptions = data.inputs.valuation_assumptions;
   const industry = data.inputs.industry_data;
   const macro = data.inputs.macro_inputs;
@@ -12,12 +14,12 @@ export default function Diagnostics({ data, sessionId }: { data: ValuationRespon
 
   // ---------- Step 1 helpers ----------
   const recentRevenueGrowth =
-    fin.length >= 2 && fin[0].revenues && fin[1].revenues
-      ? (fin[0].revenues - fin[1].revenues) / Math.abs(fin[1].revenues)
+    by && py && by.revenues && py.revenues
+      ? (by.revenues - py.revenues) / Math.abs(py.revenues)
       : null;
 
   // ---------- Step 2 helpers ----------
-  const baseRevenue = fin.length > 0 ? fin[0].revenues : null;
+  const baseRevenue = by?.revenues ?? null;
   const revYear1 =
     dcf && dcf.revenue_projections.length >= 1
       ? dcf.revenue_projections[0]
@@ -32,16 +34,27 @@ export default function Diagnostics({ data, sessionId }: { data: ValuationRespon
       : null;
 
   // ---------- Step 3 helpers ----------
-  const currentMargin =
-    fin.length > 0 && fin[0].revenues
-      ? fin[0].ebit / fin[0].revenues
-      : null;
+  // Adjusted margin — matches Damodaran's convention and what the engine
+  // uses as the base-year margin in M4. Using raw EBIT here made the
+  // "current margin" appear discontinuous with Yr1 projected margin.
+  const currentMargin = baseYearMargin(data);
 
   // ---------- Step 6 helpers ----------
+  // FX-aware price/value: convert market price to reporting currency
+  // before dividing. Skips the comparison if currencies differ and
+  // no FX rate is available.
   const valuePerShare = data.final?.value_per_share ?? null;
-  const stockPrice = fin.length > 0 ? fin[0].stock_price ?? null : null;
+  const stockPriceListing = by?.stock_price ?? null;
+  const listingCcy = data.inputs.stock_price_currency;
+  const reportingCcy = data.inputs.reporting_currency;
+  const fxRate = data.inputs.fx_rate;
+  const sameCcy = listingCcy && reportingCcy && listingCcy === reportingCcy;
+  const stockPriceInReporting =
+    stockPriceListing != null && (sameCcy ? stockPriceListing : fxRate != null ? stockPriceListing * fxRate : null);
   const priceAsPctOfValue =
-    valuePerShare && stockPrice ? stockPrice / valuePerShare : null;
+    valuePerShare && valuePerShare !== 0 && stockPriceInReporting != null
+      ? stockPriceInReporting / valuePerShare
+      : null;
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 space-y-4">

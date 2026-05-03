@@ -1,6 +1,7 @@
 import type { ValuationResponse } from '../types/valuation';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
+import { baseYear } from '../lib/baseYear';
 
 function dec(v: number | null | undefined, digits = 2): string {
   if (v === null || v === undefined) return '';
@@ -13,7 +14,7 @@ function pct(v: number | null | undefined): string {
 
 export default function RelativeValuation({ data }: { data: ValuationResponse; sessionId?: string | null }) {
   const multiples = data.multiples;
-  const fin0 = data.inputs.raw_financials[0];
+  const fin0 = baseYear(data);          // LTM-rotated base year
   const ind = data.inputs.industry_data;
   const indGlobal = data.inputs.industry_data_global;
   const adj = data.adjusted;

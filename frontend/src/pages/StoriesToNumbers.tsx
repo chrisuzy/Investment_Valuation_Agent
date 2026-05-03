@@ -2,11 +2,12 @@ import type { ValuationResponse } from '../types/valuation';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
+import { baseYear } from '../lib/baseYear';
 
 export default function StoriesToNumbers({ data, sessionId }: { data: ValuationResponse; sessionId?: string | null }) {
   const assumptions = data.inputs.valuation_assumptions;
   const industry = data.inputs.industry_data;
-  const fin = data.inputs.raw_financials[0];
+  const fin = baseYear(data);         // LTM-rotated base year
 
   const stories: { narrative: string; driver: string; input: string; value: string | number | null; type: 'hypothesis' | 'calc' | 'reference' }[] = [
     {

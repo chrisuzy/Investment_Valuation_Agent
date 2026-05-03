@@ -3,6 +3,7 @@ import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
 import { ciq, formula, iterated, user, backendField } from '../lib/sources';
+import { baseYear } from '../lib/baseYear';
 
 // ---------- helpers ----------
 
@@ -20,7 +21,7 @@ function pct(v: number | null | undefined): string {
 
 export default function OptionValue({ data, sessionId }: { data: ValuationResponse; sessionId?: string | null }) {
   const opt = data.inputs.option_inputs;
-  const fin0 = data.inputs.raw_financials[0];
+  const fin0 = baseYear(data);              // LTM-rotated base year
   const macro = data.inputs.macro_inputs;
   const fin = data.final;
 

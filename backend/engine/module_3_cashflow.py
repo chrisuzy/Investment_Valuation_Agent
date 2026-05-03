@@ -40,7 +40,15 @@ def compute_cashflow_and_growth(
     Returns:
         CashFlowMetrics with all computed values.
     """
-    if macro is not None:
+    # Damodaran convention for base-year NOPAT / ROIC / reinvestment-rate:
+    # use the EFFECTIVE tax rate (what the firm actually paid) so historical
+    # ROIC matches reality. Marginal is reserved for DCF projections
+    # (Module 4) where it represents the tax the firm would pay on
+    # incremental future earnings. Fall back to marginal if effective
+    # isn't available, then to reverse-engineering from Kd.
+    if macro is not None and macro.tax_rate_effective is not None:
+        tax_rate = macro.tax_rate_effective
+    elif macro is not None:
         tax_rate = macro.tax_rate_marginal
     elif cost_of_capital.cost_of_debt_pretax > 0:
         tax_rate = 1 - (cost_of_capital.cost_of_debt_aftertax / cost_of_capital.cost_of_debt_pretax)

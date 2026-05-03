@@ -2,6 +2,7 @@ import type { ValuationResponse } from '../types/valuation';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import DualCurrency from '../components/DualCurrency';
+import { baseYear as getBaseYear, baseYearEbit } from '../lib/baseYear';
 
 // Formatters
 function pct(v: number | null | undefined): string {
@@ -30,7 +31,8 @@ export default function SummarySheet({ data }: { data: ValuationResponse; sessio
   const va = inp.valuation_assumptions;
   const macro = inp.macro_inputs;
   const coc = data.cost_of_capital;
-  const fin0 = inp.raw_financials[0];
+  const fin0 = getBaseYear(data);  // LTM-rotated base year when available
+  const baseEbit = baseYearEbit(data) ?? 0;  // Damodaran-adjusted EBIT
 
   if (!dcf) {
     return (
@@ -58,8 +60,11 @@ export default function SummarySheet({ data }: { data: ValuationResponse; sessio
     else growthPath.push(null);
   }
 
-  // Margin %: ebit / revenue per year
-  const ebit = [fin0?.ebit ?? 0, ...dcf.ebit_projections];
+  // Margin %: ebit / revenue per year.
+  // Base-year EBIT uses the Damodaran-adjusted value (post R&D + lease
+  // capitalization) so the "FYn Base" column lines up smoothly with the
+  // Yr1+ projections instead of showing an artificial cliff.
+  const ebit = [baseEbit, ...dcf.ebit_projections];
   const marginPath: (number | null)[] = [];
   for (let i = 0; i <= n; i++) {
     if (rev[i] > 0) marginPath.push(ebit[i] / rev[i]);
@@ -180,7 +185,7 @@ export default function SummarySheet({ data }: { data: ValuationResponse; sessio
           <tr>
             <SpreadsheetCell value="Operating Income (EBIT)" type="label" />
             {years.map(t => {
-              if (t === 0) return <SpreadsheetCell key={`ebit-${t}`} value={num(fin0?.ebit)} type="financial" width={COL_WIDTH} />;
+              if (t === 0) return <SpreadsheetCell key={`ebit-${t}`} value={num(baseEbit)} type="financial" tooltip="Damodaran-adjusted EBIT (raw EBIT + R&D add-back + lease add-back). Matches the base-year EBIT used as the starting point of M4's margin path." width={COL_WIDTH} />;
               if (t === n + 1) {
                 const rev_term = rev[n] * (1 + (g_terminal ?? 0));
                 const ebit_term = rev_term * (va.target_operating_margin ?? marginPath[n] ?? 0);

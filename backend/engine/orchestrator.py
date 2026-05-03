@@ -141,18 +141,27 @@ def run_full_valuation(
     )
 
     # --- Populate company_metrics so the Input Sheet "Company" column has
-    #     data to display next to the industry references. Pulls from the
-    #     raw financials we already have + the WACC we just computed.
-    tax_rate = (
-        inputs.macro_inputs.tax_rate_marginal
-        if inputs.macro_inputs and inputs.macro_inputs.tax_rate_marginal is not None
-        else 0.21
+    #     data to display next to the industry references. Uses the LTM-
+    #     rotated base year (not raw FY0) so the "Company" ratios match
+    #     what drives the DCF. Effective tax for historical ROIC — Damodaran
+    #     convention, matches what the firm actually paid.
+    tax_rate_for_roic = (
+        inputs.macro_inputs.tax_rate_effective
+        if inputs.macro_inputs and inputs.macro_inputs.tax_rate_effective is not None
+        else (inputs.macro_inputs.tax_rate_marginal if inputs.macro_inputs else 0.21)
     )
+    # Prepend LTM as the "current year" so fin0 == LTM; fin1 onwards are
+    # the prior annual periods. This mirrors how every other engine module
+    # reads the base year.
+    ltm_then_prior: list = []
+    if report.ltm_financials is not None:
+        ltm_then_prior.append(report.ltm_financials)
+    ltm_then_prior.extend(inputs.raw_financials)
     computed_cm = compute_company_metrics(
-        inputs.raw_financials,
+        ltm_then_prior,
         cost_of_capital=report.cost_of_capital,
         adjusted=report.adjusted,
-        tax_rate=tax_rate,
+        tax_rate=tax_rate_for_roic,
     )
     # Preserve any user-supplied std_dev_stock / marginal_sales_to_capital
     # by only overwriting null fields on the input.

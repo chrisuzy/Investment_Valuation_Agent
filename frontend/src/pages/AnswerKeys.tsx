@@ -2,9 +2,10 @@ import type { ValuationResponse } from '../types/valuation';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
+import { baseYear } from '../lib/baseYear';
 
 export default function AnswerKeys({ data, sessionId }: { data: ValuationResponse; sessionId?: string | null }) {
-  const fin = data.inputs.raw_financials[0];
+  const fin = baseYear(data);    // LTM-rotated base year
   const assumptions = data.inputs.valuation_assumptions;
   const industry = data.inputs.industry_data;
   const macro = data.inputs.macro_inputs;
