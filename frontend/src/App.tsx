@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
+import OnboardingWizard from './components/OnboardingWizard';
 import InputSheet from './pages/InputSheet';
 import ValuationOutput from './pages/ValuationOutput';
 import SummarySheet from './pages/SummarySheet';
@@ -19,85 +20,12 @@ import AnswerKeys from './pages/AnswerKeys';
 import CurrencyBanner from './components/CurrencyBanner';
 import UnresolvedFieldsPanel from './components/UnresolvedFieldsPanel';
 import type { ValuationResponse } from './types/valuation';
-import { fetchByTicker, createValuation, patchValuation, downloadTemplate, fetchFromFile, downloadFullWorkbook, searchCompanies, type PatchValue } from './api/client';
-import type { SearchResult } from './api/client';
+import { createValuation, patchValuation, downloadFullWorkbook, type PatchValue } from './api/client';
 
 export default function App() {
   const [data, setData] = useState<ValuationResponse | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [ticker, setTicker] = useState('');
-  const [region, setRegion] = useState('US');
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-
-  // Search state
-  const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
-  const [selectedCompany, setSelectedCompany] = useState<SearchResult | null>(null);
-  const [searching, setSearching] = useState(false);
-
-  async function handleSearch() {
-    const q = ticker.trim();
-    if (!q) return;
-    setSearching(true);
-    setError(null);
-    setSearchResults(null);
-    setSelectedCompany(null);
-    try {
-      const results = await searchCompanies(q);
-      if (results.length === 0) {
-        setError(`No companies found for "${q}". Try a different ticker, name, or Exchange:Ticker format.`);
-      } else if (results.length === 1) {
-        // Exact match — auto-select
-        setSelectedCompany(results[0]);
-        setRegion(results[0].region);
-        setSearchResults(results);
-      } else {
-        setSearchResults(results);
-      }
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Search failed');
-    } finally {
-      setSearching(false);
-    }
-  }
-
-  function handleSelectCompany(company: SearchResult) {
-    setSelectedCompany(company);
-    setRegion(company.region);
-  }
-
-  async function handleFetch() {
-    const t = selectedCompany?.exchange_ticker || ticker.trim();
-    if (!t) return;
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setLoading(true);
-    setError(null);
-    try {
-      const resp = await fetchByTicker(t, region, 0.0425, controller.signal);
-      // Always set data — even with empty financials, we show industry data + CIQ instructions
-      setData(resp);
-      setSessionId(resp.id);
-    } catch (e: unknown) {
-      if (controller.signal.aborted) return;
-      if (e && typeof e === 'object' && 'response' in e) {
-        const axErr = e as { response?: { data?: { detail?: string } } };
-        setError(axErr.response?.data?.detail || 'Request failed');
-      } else {
-        setError(e instanceof Error ? e.message : 'Failed to load');
-      }
-    } finally {
-      if (!controller.signal.aborted) setLoading(false);
-    }
-  }
-
-  function handleStop() {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setLoading(false);
-  }
 
   const handleCellUpdate = useCallback(async (dotPath: string, value: PatchValue) => {
     if (!sessionId || !data) return;
@@ -110,56 +38,25 @@ export default function App() {
   }, [sessionId, data]);
 
   async function handleLoadDemo() {
-    setLoading(true);
     setError(null);
     try {
       const resp = await createValuation(DEMO_INPUT);
       setData(resp);
+      setSessionId(resp.id);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load');
-    } finally {
-      setLoading(false);
     }
   }
 
-  async function handleDownloadTemplate() {
-    try {
-      // Use the selected company's symbol if available, otherwise the search query
-      const t = selectedCompany?.symbol || ticker.trim() || 'NVDA';
-      await downloadTemplate(t);
-    } catch {
-      setError('Failed to download template');
-    }
-  }
-
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const resp = await fetchFromFile(file, region, 0.0425);
-      setData(resp);
-      setSessionId(resp.id);
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'response' in err) {
-        const axErr = err as { response?: { data?: { detail?: string } } };
-        setError(axErr.response?.data?.detail || 'Failed to load CIQ file');
-      } else {
-        setError(err instanceof Error ? err.message : 'Failed to load CIQ file');
-      }
-    } finally {
-      setLoading(false);
-      e.target.value = ''; // reset file input
-    }
+  function handleWizardComplete(resp: ValuationResponse) {
+    setData(resp);
+    setSessionId(resp.id);
   }
 
   function handleReset() {
     setData(null);
     setError(null);
-    setTicker('');
-    setSearchResults(null);
-    setSelectedCompany(null);
+    setSessionId(null);
   }
 
   return (
@@ -167,136 +64,7 @@ export default function App() {
       <Sidebar />
       <main className="flex-1 p-6 overflow-auto">
         {!data ? (
-          <div className="flex flex-col items-center justify-center h-full gap-5 max-w-3xl mx-auto">
-            <h1 className="text-3xl font-bold text-gray-800">Valuation Engine</h1>
-            <p className="text-gray-500 text-sm">Search by ticker, company name, or Exchange:Ticker (e.g. NVDA, Lenovo, SASE:2280)</p>
-
-            {/* --- Step 1: Search --- */}
-            <div className="flex gap-2 items-end w-full justify-center">
-              <div className="flex-1 max-w-sm">
-                <label className="block text-xs text-gray-500 mb-1">Search</label>
-                <input
-                  type="text"
-                  value={ticker}
-                  onChange={(e) => { setTicker(e.target.value); setSelectedCompany(null); setSearchResults(null); }}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                  placeholder="e.g. NVDA, Lenovo, 2280, SASE:2280"
-                  className="px-4 py-2 border border-gray-300 rounded-lg w-full text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <button
-                onClick={handleSearch}
-                disabled={!ticker.trim() || searching}
-                className="px-5 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
-              >
-                {searching ? 'Searching...' : 'Search'}
-              </button>
-            </div>
-
-            {/* --- Step 2: Search Results / Confirmation --- */}
-            {searchResults && searchResults.length > 0 && (
-              <div className="w-full border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
-                <div className="px-3 py-2 bg-gray-50 text-xs font-bold text-gray-600 border-b">
-                  {searchResults.length} result{searchResults.length > 1 ? 's' : ''} found — select the correct company:
-                </div>
-                <div className="max-h-64 overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 text-xs text-gray-500 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-1.5 text-left">Exchange:Ticker</th>
-                        <th className="px-3 py-1.5 text-left">Company Name</th>
-                        <th className="px-3 py-1.5 text-left">Country</th>
-                        <th className="px-3 py-1.5 text-left">Industry</th>
-                        <th className="px-3 py-1.5 text-left">Region</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {searchResults.map((r) => (
-                        <tr
-                          key={r.exchange_ticker}
-                          onClick={() => handleSelectCompany(r)}
-                          className={`cursor-pointer hover:bg-blue-50 border-b border-gray-100 ${
-                            selectedCompany?.exchange_ticker === r.exchange_ticker ? 'bg-blue-100 font-semibold' : ''
-                          }`}
-                        >
-                          <td className="px-3 py-1.5 font-mono text-xs">{r.exchange_ticker}</td>
-                          <td className="px-3 py-1.5">{r.company_name}</td>
-                          <td className="px-3 py-1.5 text-xs">{r.country}</td>
-                          <td className="px-3 py-1.5 text-xs">{r.industry}</td>
-                          <td className="px-3 py-1.5 text-xs">{r.region}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* --- Step 3: Confirm & Fetch --- */}
-            {selectedCompany && (
-              <div className="w-full bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-blue-900">{selectedCompany.company_name}</span>
-                    <span className="text-blue-600 ml-2 text-sm">({selectedCompany.exchange_ticker})</span>
-                    <span className="text-blue-500 ml-2 text-xs">{selectedCompany.country} | {selectedCompany.industry} | Region: {selectedCompany.region}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    {loading ? (
-                      <button onClick={handleStop} className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">Stop</button>
-                    ) : (
-                      <button
-                        onClick={handleFetch}
-                        className="px-5 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
-                      >
-                        Run Valuation
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 w-full">
-                <p className="text-red-700 text-sm">{error}</p>
-              </div>
-            )}
-
-            {/* --- CIQ Template Upload --- */}
-            <div className="flex items-center gap-3 mt-2">
-              <div className="h-px bg-gray-300 w-16" />
-              <span className="text-gray-400 text-xs">or use CIQ Template</span>
-              <div className="h-px bg-gray-300 w-16" />
-            </div>
-
-            <div className="flex gap-3 items-center">
-              <button
-                onClick={handleDownloadTemplate}
-                className="px-4 py-1.5 text-sm text-green-700 border border-green-400 rounded-lg hover:bg-green-50"
-              >
-                1. Download CIQ Template
-              </button>
-              <span className="text-gray-400 text-xs">then</span>
-              <label className="px-4 py-1.5 text-sm text-purple-700 border border-purple-400 rounded-lg hover:bg-purple-50 cursor-pointer">
-                2. Upload Resolved File
-                <input type="file" accept=".xlsx,.xls" onChange={handleFileUpload} className="hidden" />
-              </label>
-            </div>
-            <p className="text-xs text-gray-400 max-w-md text-center">
-              Download the template, open it in Excel with CIQ plugin, wait for data to load, save, then upload it here.
-            </p>
-
-            <div className="flex gap-3 mt-1">
-              <button
-                onClick={handleLoadDemo}
-                disabled={loading}
-                className="px-4 py-1 text-xs text-gray-400 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50"
-              >
-                Load Demo Data
-              </button>
-            </div>
-          </div>
+          <OnboardingWizard onComplete={handleWizardComplete} onDemo={handleLoadDemo} />
         ) : (
           <>
             <div className="flex items-center justify-between mb-4">
@@ -323,37 +91,9 @@ export default function App() {
               </div>
             </div>
 
-            {/* CIQ Template Banner — shown when no financial data yet */}
-            {data.inputs.raw_financials.length === 0 && (
-              <div className="mb-6 bg-amber-50 border-2 border-amber-300 rounded-lg p-5">
-                <h3 className="font-bold text-amber-900 text-lg mb-2">Financial Data Needed</h3>
-                <p className="text-amber-800 text-sm mb-3">
-                  Industry and macro data loaded from Damodaran. To complete the valuation, you need to fetch financial data from Capital IQ:
-                </p>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <span className="bg-amber-200 text-amber-900 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">1</span>
-                    <button
-                      onClick={handleDownloadTemplate}
-                      className="px-4 py-2 text-sm font-medium text-green-800 bg-green-100 border border-green-400 rounded-lg hover:bg-green-200"
-                    >
-                      Download CIQ Template
-                    </button>
-                  </div>
-                  <span className="text-amber-400">→</span>
-                  <div className="flex items-center gap-2">
-                    <span className="bg-amber-200 text-amber-900 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">2</span>
-                    <span className="text-sm text-amber-800">Open in Excel with CIQ plugin, wait for data, save</span>
-                  </div>
-                  <span className="text-amber-400">→</span>
-                  <div className="flex items-center gap-2">
-                    <span className="bg-amber-200 text-amber-900 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">3</span>
-                    <label className="px-4 py-2 text-sm font-medium text-purple-800 bg-purple-100 border border-purple-400 rounded-lg hover:bg-purple-200 cursor-pointer">
-                      Upload Resolved File
-                      <input type="file" accept=".xlsx,.xls" onChange={handleFileUpload} className="hidden" />
-                    </label>
-                  </div>
-                </div>
+            {error && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-red-700 text-sm">{error}</p>
               </div>
             )}
             <CurrencyBanner data={data} />
