@@ -1,297 +1,112 @@
 """
-Generate a reusable CIQ template Excel file.
+Prepare a CIQ template for download by copying the user's authoritative
+template and substituting the requested ticker.
 
-How it works:
-  1. Cell B1 = ticker (e.g., "NVDA")
-  2. All CIQ formulas reference $B$1 as the ticker
-  3. User opens in Excel with CIQ plugin → formulas auto-resolve
-  4. User saves → backend reads the resolved values
+Authoritative template: ``knowledge_base/ciq_fetches/CIQ_Fetch_Template_new.xlsx``
+— formulas, mnemonics, layout, and currency handling are all authored there.
+This script does NOT regenerate any formulas. It only:
+
+  1. Copies the authoritative file to ``CIQ_Fetch_Template.xlsx``.
+  2. Writes the ticker into cell ``B1`` of the ``CIQ_Data`` sheet (the
+     $B$1-referencing formulas resolve off this cell).
+  3. Swaps the legacy hardcoded ticker inside the geo-segment formulas
+     (the ``IQ_GEO_SEG_*`` rows embed the ticker as a string literal
+     rather than ``$B$1``, so a text substitution is required to make
+     them resolve for a different company).
 
 Usage:
-  python -m tools.generate_ciq_template           # generates template
-  python -m tools.generate_ciq_template NVDA       # generates with NVDA as default ticker
+  python -m tools.generate_ciq_template           # defaults to NVDA
+  python -m tools.generate_ciq_template NVDA
+  python -m tools.generate_ciq_template SEHK:992
 """
 
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
-
-# Add parent to path so we can import from data_sources
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from data_sources.capiq_formula_map import (
-    INCOME_STATEMENT_FIELDS,
-    BALANCE_SHEET_FIELDS,
-    MARKET_FIELDS,
-    CASHFLOW_FIELDS,
-    OPTION_FIELDS,
-    LEASE_COMMITMENT_FIELDS,
-    PERIOD_DATE_FIELDS,
-    GEO_SEGMENT_FIELDS,
-    GEO_SEGMENT_RANKS,
-)
 
 
-# ── Configuration ──────────────────────────────────────────────
-YEARS_BACK = 10
-QUARTERLY_BACK = 8
-RD_YEARS_BACK = 10
+# ── Paths ──────────────────────────────────────────────────────
+CIQ_DIR = Path(__file__).resolve().parent.parent.parent / "knowledge_base" / "ciq_fetches"
+SOURCE_TEMPLATE = CIQ_DIR / "CIQ_Fetch_Template_new.xlsx"
+OUTPUT_TEMPLATE = CIQ_DIR / "CIQ_Fetch_Template.xlsx"
 
-OUTPUT_DIR = Path(__file__).resolve().parent.parent.parent / "knowledge_base" / "ciq_fetches"
-
-# ── Styles ─────────────────────────────────────────────────────
-HEADER_FILL = PatternFill("solid", fgColor="4472C4")
-HEADER_FONT = Font(bold=True, color="FFFFFF", size=11)
-SECTION_FILL = PatternFill("solid", fgColor="D9E2F3")
-SECTION_FONT = Font(bold=True, size=11)
-TICKER_FILL = PatternFill("solid", fgColor="FFFF00")
-TICKER_FONT = Font(bold=True, size=14)
-THIN_BORDER = Border(
-    left=Side(style="thin"),
-    right=Side(style="thin"),
-    top=Side(style="thin"),
-    bottom=Side(style="thin"),
-)
+# The authoritative template was authored with Lenovo HK ("992") as the
+# example ticker. Geo-segment formulas embed this literal rather than
+# referencing $B$1, so we need to substitute it on download.
+LEGACY_HARDCODED_TICKER = "992"
 
 
-def generate_template(default_ticker: str = "NVDA") -> Path:
-    """Generate the CIQ fetch template Excel file."""
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = OUTPUT_DIR / "CIQ_Fetch_Template.xlsx"
+def _read_legacy_ticker(ws) -> str:
+    """Return whatever ticker is currently sitting in B1 of the source file.
 
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "CIQ_Data"
+    Falls back to ``LEGACY_HARDCODED_TICKER`` if B1 is missing or empty.
+    Using whatever is actually in B1 keeps us robust to the user updating
+    the source template with a different example ticker later.
+    """
+    b1 = ws["B1"].value
+    if b1 is None:
+        return LEGACY_HARDCODED_TICKER
+    return str(b1).strip()
 
-    # ── Row 1: Ticker input ────────────────────────────────────
-    ws["A1"] = "Ticker:"
-    ws["A1"].font = Font(bold=True, size=12)
-    ws["B1"] = default_ticker
-    ws["B1"].font = TICKER_FONT
-    ws["B1"].fill = TICKER_FILL
-    ws["B1"].alignment = Alignment(horizontal="center")
 
-    ws["C1"] = "← Change this ticker, then wait for CIQ to resolve all formulas, then Save."
-    ws["C1"].font = Font(italic=True, color="666666")
+def generate_template(ticker: str = "NVDA") -> Path:
+    """Prepare a download-ready CIQ template for ``ticker``.
 
-    # ── Row 2: Instructions ────────────────────────────────────
-    ws["A2"] = "Instructions:"
-    ws["B2"] = "1) Enter ticker in B1  2) Wait for #GETTING_DATA to disappear  3) Save (Ctrl+S)  4) Load in app"
-    ws["B2"].font = Font(italic=True, color="444444")
+    The source file's formulas are preserved exactly; only the ticker
+    literal (B1 plus any legacy hardcoded occurrences) is changed.
+    """
+    if not SOURCE_TEMPLATE.exists():
+        raise FileNotFoundError(
+            f"Authoritative CIQ template not found: {SOURCE_TEMPLATE}. "
+            f"This file is required — do not regenerate it from scratch."
+        )
 
-    # ── Row 3: unused helper spacer (filing-currency helper removed) ──
-    # Earlier attempt used a cell-reference approach; the actual S&P syntax
-    # is a literal "REPORTED" token in the 4th CIQ argument, so no helper
-    # cell is needed. Keeping row 3 as a blank spacer for visual separation.
+    # 1. Byte-copy the authoritative file so the output keeps all of
+    #    Excel's XLL-binding metadata, the _CIQHiddenCacheSheet, and any
+    #    other plugin-authored bits that openpyxl might not preserve
+    #    perfectly on a cold save.
+    shutil.copy2(SOURCE_TEMPLATE, OUTPUT_TEMPLATE)
 
-    row = 4
+    # 2. Open the copy and perform only the ticker substitution.
+    wb = openpyxl.load_workbook(OUTPUT_TEMPLATE, data_only=False)
+    ws = wb["CIQ_Data"]
 
-    # ── Column headers ─────────────────────────────────────────
-    headers = ["Variable", "Period", "CIQ Formula", "Resolved Value", "Description"]
-    col_widths = [30, 12, 55, 20, 40]
-    for c, (h, w) in enumerate(zip(headers, col_widths), 1):
-        cell = ws.cell(row, c, h)
-        cell.font = HEADER_FONT
-        cell.fill = HEADER_FILL
-        cell.alignment = Alignment(horizontal="center")
-        cell.border = THIN_BORDER
-        ws.column_dimensions[get_column_letter(c)].width = w
+    legacy_ticker = _read_legacy_ticker(ws)
+    ws["B1"] = ticker
 
-    row += 1
-    formula_rows: list[dict] = []  # track all formula rows for the reader
+    # 3. Replace the legacy hardcoded ticker wherever it's embedded as a
+    #    quoted string literal inside a formula. This should only hit the
+    #    ~20 geo-segment cells that don't use $B$1.
+    needle_quoted = f'"{legacy_ticker}"'
+    replacement_quoted = f'"{ticker}"'
+    replacements = 0
+    for row in ws.iter_rows():
+        for cell in row:
+            v = cell.value
+            if not isinstance(v, str):
+                continue
+            if not v.startswith("="):
+                continue
+            if needle_quoted in v:
+                cell.value = v.replace(needle_quoted, replacement_quoted)
+                replacements += 1
 
-    def add_section(title: str):
-        nonlocal row
-        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=5)
-        cell = ws.cell(row, 1, title)
-        cell.font = SECTION_FONT
-        cell.fill = SECTION_FILL
-        row += 1
+    wb.save(OUTPUT_TEMPLATE)
+    print(f"Prepared CIQ template: {OUTPUT_TEMPLATE}")
+    print(f"  Ticker set to: {ticker} (was: {legacy_ticker})")
+    print(f"  Hardcoded-ticker substitutions: {replacements}")
+    print()
+    print("Next steps:")
+    print(f"  1. Open {OUTPUT_TEMPLATE.name} in Excel with the CIQ plugin")
+    print(f"  2. Wait for all formulas to resolve")
+    print(f"  3. Save the file")
+    print(f"  4. Upload via the app's 'Load from CIQ File' button")
 
-    # Expense-type fields: CIQ returns negative, Damodaran uses positive.
-    # Wrap these with ABS() in the template so values are positive from the start.
-    EXPENSE_VARIABLES = {"interest_expense", "capex", "d_a", "operating_lease_expense"}
-
-    # Build lookup of currency-override tokens (e.g. "<FILING>") per variable.
-    # These are CIQ's magic 5th-argument values that resolve at query time to
-    # the company's actual filing / trading currency — no per-ticker hardcoding.
-    from data_sources.capiq_formula_map import ALL_FIELDS
-    _CCY_OVERRIDES = {f.variable_name: f.currency_override for f in ALL_FIELDS if f.currency_override}
-
-    def add_formula_row(variable: str, mnemonic: str, period: str, description: str):
-        nonlocal row
-        # Build formula referencing $B$1 as ticker.
-        # CIQ signature: CIQ(identifier, mnemonic, [period_or_date], [currency_scope])
-        # The 4th argument is the currency scope: "TRADED" (default) for trading
-        # currency, "REPORTED" for filing/reporting currency. This is the universal
-        # S&P Capital IQ syntax, verified against the live plugin.
-        ccy = _CCY_OVERRIDES.get(variable)
-        if ccy:
-            # Currency override lives in position 4. Pass "" for period when current.
-            if period == "current":
-                ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","","{ccy}")'
-            else:
-                ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","{period}","{ccy}")'
-        elif period == "current":
-            ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}")'
-        else:
-            ciq_call = f'_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","{period}")'
-
-        # Wrap expense-type fields with ABS() so values are always positive
-        if variable in EXPENSE_VARIABLES:
-            formula = f"=ABS({ciq_call})"
-        else:
-            formula = f"={ciq_call}"
-
-        ws.cell(row, 1, variable).border = THIN_BORDER
-        ws.cell(row, 2, period).border = THIN_BORDER
-        # Column C: the actual CIQ formula (Excel will evaluate it)
-        cell_c = ws.cell(row, 3)
-        cell_c.value = formula
-        cell_c.border = THIN_BORDER
-        cell_c.font = Font(color="0000CC", size=10)
-        # Column D: formula that just references C (so resolved value is in D)
-        cell_d = ws.cell(row, 4)
-        cell_d.value = f"=C{row}"
-        cell_d.border = THIN_BORDER
-        cell_d.number_format = '#,##0.00'
-        # Column E: description
-        ws.cell(row, 5, description).border = THIN_BORDER
-
-        formula_rows.append({
-            "row": row,
-            "variable": variable,
-            "period": period,
-            "mnemonic": mnemonic,
-        })
-        row += 1
-
-    # ── Income Statement (multi-year annual) ───────────────────
-    add_section("INCOME STATEMENT (Annual)")
-    for field in INCOME_STATEMENT_FIELDS + CASHFLOW_FIELDS:
-        max_yr = RD_YEARS_BACK if field.variable_name in ("r_and_d_expense", "r_and_d_expense_fn") else YEARS_BACK
-        for yr in range(max_yr + 1):
-            period = f"IQ_FY-{yr}"
-            add_formula_row(field.variable_name, field.mnemonic, period, field.description)
-
-    # ── Income Statement (quarterly for LTM) ──────────────────
-    add_section("INCOME STATEMENT (Quarterly — for LTM)")
-    for field in INCOME_STATEMENT_FIELDS + CASHFLOW_FIELDS:
-        for q in range(QUARTERLY_BACK):
-            period = f"IQ_FQ-{q}"
-            add_formula_row(field.variable_name, field.mnemonic, period, field.description)
-
-    # ── Balance Sheet (multi-year annual) ────────────────────────
-    add_section("BALANCE SHEET (Annual)")
-    for field in BALANCE_SHEET_FIELDS:
-        for yr in range(YEARS_BACK + 1):
-            period = f"IQ_FY-{yr}"
-            add_formula_row(field.variable_name, field.mnemonic, period, field.description)
-
-    # ── Balance Sheet (quarterly FQ-0 for point-in-time LTM) ──
-    add_section("BALANCE SHEET (Quarterly — latest 10-Q)")
-    for field in BALANCE_SHEET_FIELDS:
-        add_formula_row(field.variable_name, field.mnemonic, "IQ_FQ-0", f"{field.description} (latest quarter)")
-
-    # ── Market Data (current only) ─────────────────────────────
-    add_section("MARKET DATA (Current)")
-    for field in MARKET_FIELDS:
-        # Skip effective_tax_rate_ciq — handled separately with /100
-        if field.variable_name == "effective_tax_rate_ciq":
-            continue
-        add_formula_row(field.variable_name, field.mnemonic, "current", field.description)
-
-    # Effective tax rate: special formula with /100 (CIQ returns percentage, we need decimal)
-    add_formula_row("effective_tax_rate_ciq", "IQ_EFFECT_TAX_RATE", "IQ_FY", "Effective Tax Rate (CIQ, /100)")
-    # Override the formula in the last row to add /100
-    tax_row = row - 1
-    ws.cell(tax_row, 3).value = '=_xll.ciqfunctions.udf.CIQ($B$1,"IQ_EFFECT_TAX_RATE","IQ_FY")/100'
-
-    # ── Options (current only) ─────────────────────────────────
-    add_section("EMPLOYEE OPTIONS (Current)")
-    for field in OPTION_FIELDS:
-        add_formula_row(field.variable_name, field.mnemonic, "current", field.description)
-
-    # ── Lease Commitments (current only) ───────────────────────
-    add_section("OPERATING LEASE COMMITMENTS (Current)")
-    for field in LEASE_COMMITMENT_FIELDS:
-        add_formula_row(field.variable_name, field.mnemonic, "current", field.description)
-
-    # ── Period Dates ───────────────────────────────────────────
-    add_section("PERIOD DATES")
-    add_formula_row("period_date_annual", "IQ_PERIODDATE", "IQ_FY-0", "Most recent 10-K period end date")
-    add_formula_row("period_date_quarterly", "IQ_PERIODDATE", "IQ_FQ-0", "Most recent 10-Q period end date")
-
-    # ── Geographic Segments ───────────────────────────────────
-    # Uses the IQ_GEO_SEG_NAME_ABS / IQ_GEO_SEG_REV_ABS mnemonic family with
-    # the rank as the 9th argument. "_ABS" sorts by revenue descending, so
-    # rank 1 = largest geographic segment by revenue. Period = IQ_FY (latest).
-    #
-    # Formula template:
-    #   =CIQ($B$1, "IQ_GEO_SEG_NAME_ABS", "IQ_FY", , , , , , <rank>)
-    #
-    # The 9th-argument pattern requires 8 empty positional args before the
-    # rank. We handle this as a special case here rather than extending the
-    # generic add_formula_row helper.
-    add_section("GEOGRAPHIC REVENUE SEGMENTS (top 10 by revenue, latest FY)")
-    for rank in GEO_SEGMENT_RANKS:
-        for suffix, mnemonic, label_prefix in [
-            ("name", "IQ_GEO_SEG_NAME_ABS", "Segment name"),
-            ("rev",  "IQ_GEO_SEG_REV_ABS",  "Segment revenue"),
-        ]:
-            variable = f"geo_seg_{suffix}_{rank}"
-            # 9th positional arg — 7 commas after the period, then the rank
-            formula = f'=_xll.ciqfunctions.udf.CIQ($B$1,"{mnemonic}","IQ_FY",,,,,,{rank})'
-            ws.cell(row, 1, variable).border = THIN_BORDER
-            ws.cell(row, 2, f"rank {rank}").border = THIN_BORDER
-            cell_c = ws.cell(row, 3)
-            cell_c.value = formula
-            cell_c.border = THIN_BORDER
-            cell_c.font = Font(color="0000CC", size=10)
-            cell_d = ws.cell(row, 4)
-            cell_d.value = f"=C{row}"
-            cell_d.border = THIN_BORDER
-            if suffix == "rev":
-                cell_d.number_format = '#,##0.00'
-            ws.cell(row, 5, f"{label_prefix} (rank {rank})").border = THIN_BORDER
-            formula_rows.append({
-                "row": row,
-                "variable": variable,
-                "period": f"rank_{rank}",
-                "mnemonic": mnemonic,
-            })
-            row += 1
-
-    # ── Metadata sheet: row map for the reader ─────────────────
-    ws_meta = wb.create_sheet("_RowMap")
-    ws_meta["A1"] = "row"
-    ws_meta["B1"] = "variable"
-    ws_meta["C1"] = "period"
-    ws_meta["D1"] = "mnemonic"
-    for i, fr in enumerate(formula_rows, 2):
-        ws_meta.cell(i, 1, fr["row"])
-        ws_meta.cell(i, 2, fr["variable"])
-        ws_meta.cell(i, 3, fr["period"])
-        ws_meta.cell(i, 4, fr["mnemonic"])
-
-    # ── Save ───────────────────────────────────────────────────
-    wb.save(str(output_path))
-    print(f"Generated CIQ template: {output_path}")
-    print(f"  {len(formula_rows)} formulas")
-    print(f"  Default ticker: {default_ticker}")
-    print(f"\nNext steps:")
-    print(f"  1. Open {output_path.name} in Excel (with CIQ plugin)")
-    print(f"  2. Change ticker in B1 if needed")
-    print(f"  3. Wait for all formulas to resolve")
-    print(f"  4. Save the file")
-    print(f"  5. In the app, use 'Load from CIQ File' to import")
-
-    return output_path
+    return OUTPUT_TEMPLATE
 
 
 if __name__ == "__main__":
