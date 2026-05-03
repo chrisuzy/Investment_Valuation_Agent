@@ -32,9 +32,10 @@ interface Props {
   data: ValuationResponse;
   sessionId?: string | null;
   onPatch?: (path: string, value: PatchValue) => void | Promise<void>;
+  onPatchMany?: (overrides: Record<string, PatchValue>) => void | Promise<void>;
 }
 
-export default function ValuationOutput({ data, onPatch }: Props) {
+export default function ValuationOutput({ data, onPatch, onPatchMany }: Props) {
   const dcf = data.dcf;
   const inputs = data.inputs;
   const fin0 = inputs.raw_financials[0]; // base-year financials
@@ -364,7 +365,7 @@ export default function ValuationOutput({ data, onPatch }: Props) {
         </tbody>
       </SpreadsheetGrid>
 
-      <SensitivityPanel data={data} onPatch={onPatch} />
+      <SensitivityPanel data={data} onPatch={onPatch} onPatchMany={onPatchMany} />
     </div>
   );
 }

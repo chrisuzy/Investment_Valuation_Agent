@@ -326,6 +326,17 @@ class MethodologyChoices(BaseModel):
         description="When True, price debt at market via bond formula. Default False = use book as MV.",
     )
 
+    # --- WACC level shift (for sensitivity analysis) ---
+    wacc_level_shift_bps: float = Field(
+        default=0.0,
+        description=(
+            "Additive level shift applied to the computed WACC, in basis points. "
+            "Used by the sensitivity tornado to flex the total cost of capital by "
+            "a single knob without reaching into the underlying inputs. "
+            "E.g. 50 = +0.50% applied to WACC."
+        ),
+    )
+
     # --- Segments for multi-business and multi-country variants ---
     business_segments: list[BusinessSegment] = Field(default_factory=list)
     geographic_segments: list[GeographicSegment] = Field(default_factory=list)

@@ -521,6 +521,14 @@ def compute_cost_of_capital(
     # --- WACC ---
     wacc = w_e * cost_of_equity + w_d * cost_of_debt_aftertax + w_p * cost_preferred
 
+    # Sensitivity knob: additive level shift in basis points. Applied AFTER the
+    # CAPM + weights build, so it affects the "used" WACC uniformly across all
+    # 10 projection years. Only the sensitivity tornado touches this in normal
+    # usage; default is 0.
+    shift_bps = getattr(m, "wacc_level_shift_bps", 0.0) or 0.0
+    if shift_bps:
+        wacc = wacc + shift_bps / 10000.0
+
     return CostOfCapital(
         approach_used=approach_used,
         beta_branch_used=beta_branch,

@@ -982,6 +982,72 @@ def patch_valuation(session_id: str, req: OverrideRequest):
     return _report_to_dict(session)
 
 
+@router.post("/valuation/{session_id}/sensitivity")
+def sensitivity(session_id: str):
+    """Run the Damodaran-style sensitivity tornado.
+
+    For each of the 8 canonical drivers, run the full valuation pipeline
+    twice — once at each end of the driver's sweep range — and return the
+    resulting VPS along with the delta versus the current baseline. Session
+    state is NOT mutated; the user's current inputs stay intact.
+    """
+    from engine.sensitivity_ranges import build_ranges
+
+    session = get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    store = _get_damodaran_store()
+    ind_lookup, cerp_lookup = _build_lookups(store)
+
+    baseline_vps = (
+        session.report.final.value_per_share
+        if session.report.final and session.report.final.value_per_share is not None
+        else None
+    )
+
+    driver_ranges = build_ranges(session.inputs)
+    bars = []
+    for dr in driver_ranges:
+        endpoint_results = {}
+        for kind, endpoint_val in [("lo", dr.range_lo), ("hi", dr.range_hi)]:
+            trial_dict = session.inputs.model_dump()
+            _set_nested(trial_dict, dr.patch_path, endpoint_val)
+            # Terminal-growth requires the override flag to actually take effect.
+            if dr.patch_path == "valuation_assumptions.growth_perpetuity_rate":
+                _set_nested(trial_dict, "valuation_assumptions.override_growth_perpetuity", True)
+            try:
+                trial_inputs = CompanyValuationInput(**trial_dict)
+                trial_report = run_full_valuation(
+                    trial_inputs, industry_lookup=ind_lookup, country_erp_lookup=cerp_lookup
+                )
+                vps = trial_report.final.value_per_share if trial_report.final else None
+            except Exception:
+                vps = None
+            endpoint_results[kind] = vps
+
+        vps_lo = endpoint_results["lo"]
+        vps_hi = endpoint_results["hi"]
+        bars.append({
+            "driver": dr.driver,
+            "label": dr.label,
+            "patch_path": dr.patch_path,
+            "range_lo": dr.range_lo,
+            "range_hi": dr.range_hi,
+            "vps_lo": vps_lo,
+            "vps_hi": vps_hi,
+            "delta_lo": (vps_lo - baseline_vps) if (vps_lo is not None and baseline_vps is not None) else None,
+            "delta_hi": (vps_hi - baseline_vps) if (vps_hi is not None and baseline_vps is not None) else None,
+            "range_source": dr.range_source,
+        })
+
+    return {
+        "baseline_vps": baseline_vps,
+        "currency": session.inputs.reporting_currency,
+        "bars": bars,
+    }
+
+
 def _set_nested(d, path: str, value) -> None:
     """Set a value in nested dicts/lists using dot-path like 'a.b.0.c'.
 

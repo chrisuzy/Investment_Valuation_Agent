@@ -52,6 +52,14 @@ export async function patchValuation(
   return data;
 }
 
+export async function fetchSensitivity(
+  id: string,
+  signal?: AbortSignal,
+): Promise<import('../components/sensitivity/types').SensitivityResponse> {
+  const { data } = await api.post(`/valuation/${id}/sensitivity`, null, { signal });
+  return data;
+}
+
 export async function downloadTemplate(ticker: string = 'NVDA'): Promise<void> {
   const { data } = await api.post('/valuation/generate-template', null, {
     params: { ticker },

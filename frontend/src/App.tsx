@@ -37,6 +37,16 @@ export default function App() {
     }
   }, [sessionId, data]);
 
+  const handlePatchMany = useCallback(async (overrides: Record<string, PatchValue>) => {
+    if (!sessionId || !data) return;
+    try {
+      const resp = await patchValuation(sessionId, overrides);
+      setData(resp);
+    } catch {
+      // silently ignore
+    }
+  }, [sessionId, data]);
+
   async function handleLoadDemo() {
     setError(null);
     try {
@@ -101,7 +111,7 @@ export default function App() {
             <Routes>
               <Route path="/"                  element={<InputSheet data={data} sessionId={sessionId} onUpdate={handleCellUpdate} />} />
               <Route path="/summary"           element={<SummarySheet data={data} sessionId={sessionId} />} />
-              <Route path="/valuation-output"  element={<ValuationOutput data={data} sessionId={sessionId} onPatch={handleCellUpdate} />} />
+              <Route path="/valuation-output"  element={<ValuationOutput data={data} sessionId={sessionId} onPatch={handleCellUpdate} onPatchMany={handlePatchMany} />} />
               <Route path="/relative"          element={<RelativeValuation data={data} sessionId={sessionId} />} />
               <Route path="/stories"           element={<StoriesToNumbers data={data} sessionId={sessionId} />} />
               <Route path="/picture"           element={<ValuationPicture data={data} sessionId={sessionId} />} />

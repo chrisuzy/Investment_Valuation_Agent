@@ -203,6 +203,7 @@ export interface MethodologyChoices {
 
   debt_maturity_years: number;
   use_bond_pricing_for_debt: boolean;
+  wacc_level_shift_bps: number;
 
   business_segments: BusinessSegment[];
   geographic_segments: GeographicSegment[];
