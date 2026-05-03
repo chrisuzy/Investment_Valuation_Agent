@@ -522,7 +522,12 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
         const margin_avg_3 = avg(marginSeries3);
         const margin_avg_5 = avg(marginSeries5);
         const margin_avg_10 = avg(marginSeries10);
-        const margin_max_10 = Math.max(...marginSeries10.filter((v): v is number => typeof v === 'number'));
+        // Math.max on an empty array returns -Infinity — guard it so we
+        // show '—' instead of "-∞%" when no valid margin points exist.
+        const margin_max_10 = (() => {
+          const nums = marginSeries10.filter((v): v is number => typeof v === 'number' && !isNaN(v));
+          return nums.length ? Math.max(...nums) : null;
+        })();
 
         // Effective tax stats (for margin convergence story)
         // (not shown but computable)
@@ -685,9 +690,13 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
               ['ROIC', cm?.roic, ind.roic, indGlobal?.roic, 'pct', `EVA${fSuffix}.xls`, 'EVAGlobal.xls'],
               ['Std Dev Stock', cm?.std_dev_stock, ind.std_dev_stock, indGlobal?.std_dev_stock, 'pct', `EVA${fSuffix}.xls`, 'EVAGlobal.xls'],
               ['WACC', cm?.cost_of_capital, ind.wacc, indGlobal?.wacc, 'pct', `wacc${fSuffix}.xls`, 'waccGlobal.xls'],
-              ['EV/EBITDA', data.multiples?.ev_ebitda_intrinsic, ind.ev_ebitda, indGlobal?.ev_ebitda, 'dec', `vebitda${fSuffix}.xls`, 'vebitdaGlobal.xls'],
-              ['PE Ratio', data.multiples?.pe_ratio_market ?? data.multiples?.pe_ratio_intrinsic, ind.pe_ratio, indGlobal?.pe_ratio, 'dec', fSuffix ? `pe${fSuffix}.xls` : 'pedata.xls', 'peGlobal.xls'],
-              ['PBV Ratio', data.multiples?.pbv_ratio_intrinsic, ind.pbv_ratio, indGlobal?.pbv_ratio, 'dec', fSuffix ? `pbv${fSuffix}.xls` : 'pbvdata.xls', 'pbvGlobal.xls'],
+              // Multiples — label them as *intrinsic* (DCF-implied) for the
+              // company column so users don't confuse them with observed
+              // market multiples. ind.* columns remain the Damodaran
+              // industry-median reference (observed market).
+              ['EV/EBITDA (intrinsic)', data.multiples?.ev_ebitda_intrinsic, ind.ev_ebitda, indGlobal?.ev_ebitda, 'dec', `vebitda${fSuffix}.xls`, 'vebitdaGlobal.xls'],
+              ['PE Ratio (intrinsic)',  data.multiples?.pe_ratio_intrinsic,  ind.pe_ratio,  indGlobal?.pe_ratio,  'dec', fSuffix ? `pe${fSuffix}.xls` : 'pedata.xls', 'peGlobal.xls'],
+              ['PBV Ratio (intrinsic)', data.multiples?.pbv_ratio_intrinsic, ind.pbv_ratio, indGlobal?.pbv_ratio, 'dec', fSuffix ? `pbv${fSuffix}.xls` : 'pbvdata.xls', 'pbvGlobal.xls'],
             ];
             return rows.map(([label, company, regional, global_, fmt, srcRegional, srcGlobal]) => (
               <tr key={`cmp-${label}`}>

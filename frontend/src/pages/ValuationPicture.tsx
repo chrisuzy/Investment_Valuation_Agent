@@ -85,31 +85,41 @@ export default function ValuationPicture({ data, sessionId }: { data: ValuationR
             <SpreadsheetCell type="calc" value={dcf?.pv_terminal_value ?? null} />
           </tr>
           <tr>
-            <SpreadsheetCell type="label" value="= Operating Assets" bold />
+            <SpreadsheetCell type="label" value="→ Operating Assets" bold />
             <SpreadsheetCell type="calc" value={dcf?.value_of_operating_assets ?? null} bold />
           </tr>
           <tr>
-            <SpreadsheetCell type="label" value="- Debt" />
-            <SpreadsheetCell type="financial" value={fin?.bv_debt ?? null} />
+            <SpreadsheetCell type="label" value="− Debt (MV)" />
+            <SpreadsheetCell type="financial" value={coc?.mv_debt_total ?? fin?.bv_debt ?? null}
+              tooltip="Market value of debt — includes PV of operating leases and the straight portion of convertible debt. Falls back to book debt if MV unavailable." />
+          </tr>
+          <tr>
+            <SpreadsheetCell type="label" value="− Minority interests" />
+            <SpreadsheetCell type="financial" value={fin?.minority_interests ?? 0} />
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="+ Cash" />
             <SpreadsheetCell type="financial" value={fin?.cash_and_marketable_securities ?? null} />
           </tr>
           <tr>
-            <SpreadsheetCell type="label" value="= Value of Equity" bold />
-            <SpreadsheetCell type="calc" value={dcf?.value_of_equity ?? null} bold />
+            <SpreadsheetCell type="label" value="+ Cross-holdings" />
+            <SpreadsheetCell type="financial" value={fin?.cross_holdings ?? 0} />
+          </tr>
+          <tr>
+            <SpreadsheetCell type="label" value="→ Value of Equity" bold />
+            <SpreadsheetCell type="calc" value={dcf?.value_of_equity ?? null} bold
+              tooltip="Value of equity = V_operating − MV debt − minority + cash + cross-holdings. Bridge rows above reconcile to this total (rounding may give ±1 unit)." />
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="- Options" />
             <SpreadsheetCell type="calc" value={final_?.value_of_all_options ?? 0} />
           </tr>
           <tr>
-            <SpreadsheetCell type="label" value="/ Shares Outstanding" />
+            <SpreadsheetCell type="label" value="÷ Shares Outstanding" />
             <SpreadsheetCell type="financial" value={fin?.shares_outstanding ?? null} />
           </tr>
           <tr>
-            <SpreadsheetCell type="label" value="= Value per Share" bold />
+            <SpreadsheetCell type="label" value="→ Value per Share" bold />
             <SpreadsheetCell type="calc" value={final_?.value_per_share ?? null} bold />
           </tr>
           <tr>

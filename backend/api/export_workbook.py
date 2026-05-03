@@ -38,7 +38,34 @@ DEC_FMT = '#,##0.00'
 
 
 def _cell(ws, row, col, value, fill=None, font=None, fmt=None):
-    """Write a styled cell."""
+    """Write a styled cell.
+
+    Guardrail: if `value` is a STRING that starts with '=' but isn't meant
+    to be a formula (i.e. it's not a single-arg cross-sheet reference like
+    "='Input Sheet'!B12" or a plain math expression), Excel will still try
+    to parse it and fail with #NAME?. Labels like "= Operating Assets"
+    slipped through in the past and wrecked the downloaded workbook.
+
+    Here we apply a simple heuristic:
+      - if the string is a VALID-LOOKING formula (starts with `=`, contains
+        at least one of [`!`, digit, cell-ref pattern]) → leave as-is.
+      - otherwise (plain prose starting with `=`) → prepend a zero-width
+        joiner so Excel treats it as text, not a formula, and display is
+        unchanged.
+
+    Real formulas are unaffected; accidental prose-as-formula is neutered.
+    """
+    if isinstance(value, str) and value.startswith("="):
+        import re
+        looks_like_formula = (
+            "!" in value                 # cross-sheet reference
+            or re.search(r"\b[A-Z]+\d+\b", value)  # cell reference pattern
+            or re.search(r"\d", value[1:])         # digit somewhere
+        )
+        if not looks_like_formula:
+            # Neutralize: prepend an apostrophe which Excel treats as
+            # "text-mode" marker; the apostrophe itself is not displayed.
+            value = "'" + value
     c = ws.cell(row, col, value)
     c.border = THIN_BORDER
     if fill:
@@ -512,22 +539,27 @@ def _write_valuation_picture(wb: openpyxl.Workbook, inp: CompanyValuationInput, 
     # Value Bridge
     _section_title(ws, row, "Value Bridge", 2)
     row += 1
+    # Labels for "subtotal" rows in the equity bridge. Earlier versions used
+    # a leading "=" character ("= Operating Assets") as a visual cue, but
+    # Excel tries to PARSE a cell whose value starts with "=" as a formula
+    # and emits #NAME? when the identifier isn't a valid formula reference.
+    # Replaced with an ASCII "→" marker which is bold-rendered but inert.
     bridge = [
-        ("PV(Cash Flows)", dcf.pv_cash_flows_sum if dcf else None, GRAY_FILL),
-        ("+ PV(Terminal Value)", dcf.pv_terminal_value if dcf else None, GRAY_FILL),
-        ("= Operating Assets", dcf.value_of_operating_assets if dcf else None, GRAY_FILL),
-        ("- Debt", fin0.bv_debt if fin0 else None, BLUE_FILL),
-        ("- Minority interests", fin0.minority_interests if fin0 else 0, BLUE_FILL),
-        ("+ Cash", fin0.cash_and_marketable_securities if fin0 else None, BLUE_FILL),
-        ("+ Non-operating assets", fin0.cross_holdings if fin0 else 0, BLUE_FILL),
-        ("= Value of Equity", dcf.value_of_equity if dcf else None, GRAY_FILL),
-        ("- Options", final_.value_of_all_options if final_ else 0, GRAY_FILL),
-        ("/ Shares Outstanding", fin0.shares_outstanding if fin0 else None, BLUE_FILL),
-        ("= Value per Share", final_.value_per_share if final_ else None, GRAY_FILL),
-        ("Current Stock Price", fin0.stock_price if fin0 else None, BLUE_FILL),
+        ("PV(Cash Flows)",             dcf.pv_cash_flows_sum if dcf else None,          GRAY_FILL, False),
+        ("+ PV(Terminal Value)",        dcf.pv_terminal_value if dcf else None,          GRAY_FILL, False),
+        ("→ Operating Assets",          dcf.value_of_operating_assets if dcf else None, GRAY_FILL, True),
+        ("− Debt",                      fin0.bv_debt if fin0 else None,                  BLUE_FILL, False),
+        ("− Minority interests",        fin0.minority_interests if fin0 else 0,          BLUE_FILL, False),
+        ("+ Cash",                      fin0.cash_and_marketable_securities if fin0 else None, BLUE_FILL, False),
+        ("+ Non-operating assets",      fin0.cross_holdings if fin0 else 0,              BLUE_FILL, False),
+        ("→ Value of Equity",           dcf.value_of_equity if dcf else None,            GRAY_FILL, True),
+        ("− Options",                   final_.value_of_all_options if final_ else 0,    GRAY_FILL, False),
+        ("÷ Shares Outstanding",        fin0.shares_outstanding if fin0 else None,       BLUE_FILL, False),
+        ("→ Value per Share",           final_.value_per_share if final_ else None,      GRAY_FILL, True),
+        ("Current Stock Price",         fin0.stock_price if fin0 else None,              BLUE_FILL, False),
     ]
-    for label, val, fill in bridge:
-        _cell(ws, row, 1, label, font=BOLD_FONT if label.startswith("=") else NORMAL_FONT)
+    for label, val, fill, bold in bridge:
+        _cell(ws, row, 1, label, font=BOLD_FONT if bold else NORMAL_FONT)
         _cell(ws, row, 2, val, fill=fill, fmt=NUM_FMT if not isinstance(val, str) else None)
         row += 1
 

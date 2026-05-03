@@ -98,13 +98,29 @@ export default function ValuationOutput({ data, onPatch, onPatchMany }: Props) {
     }
   }
 
-  // Tax rate (same for every column)
-  const taxRate = macro.tax_rate_marginal;
+  // Tax rate per year — back out from the engine's actual NOPAT / EBIT.
+  // The engine transitions effective → marginal over the projection, so
+  // showing a flat marginal rate here (old behavior) caused the displayed
+  // EBIT(1-t) row to disagree with FCFF+Reinvestment in the same column.
+  // NOPAT_t = FCFF_t + Reinvestment_t ; tax_t = 1 − NOPAT_t / EBIT_t.
+  const taxRatePerYear: (number | undefined)[] = Array(colCount).fill(undefined);
+  if (dcf?.fcff_projections && dcf?.reinvestment_projections) {
+    for (let i = 0; i < dcf.fcff_projections.length; i++) {
+      const e = ebit[i + 1];
+      if (e != null && e !== 0) {
+        const nopat = dcf.fcff_projections[i] + dcf.reinvestment_projections[i];
+        taxRatePerYear[i + 1] = 1 - nopat / e;
+      }
+    }
+  }
+  // Base-year tax uses macro.tax_rate_effective (what the firm actually paid).
+  taxRatePerYear[0] = macro.tax_rate_effective ?? macro.tax_rate_marginal;
 
-  // EBIT(1-t)
-  const ebitAfterTax: (number | undefined)[] = ebit.map((e) =>
-    e !== undefined ? e * (1 - taxRate) : undefined,
-  );
+  // EBIT(1-t) per year — matches the engine's per-year NOPAT exactly.
+  const ebitAfterTax: (number | undefined)[] = ebit.map((e, i) => {
+    const t = taxRatePerYear[i];
+    return (e != null && t != null) ? e * (1 - t) : undefined;
+  });
 
   // Reinvestment
   const reinvestment: (number | undefined)[] = Array(colCount).fill(undefined);
@@ -171,10 +187,16 @@ export default function ValuationOutput({ data, onPatch, onPatchMany }: Props) {
         (proceedsIfFails ?? 0) * failureProbability
       : undefined;
 
-  const debt = fin0.bv_debt;
-  const minorityInterests = 0; // not in current schema — placeholder
+  // Equity-bridge components — read the actual engine fields, not 0.
+  // Earlier version hardcoded minority/cross-holdings to 0 as placeholders,
+  // which made the arithmetic shown disagree with `equityValue` below
+  // (the engine DOES subtract minority and add cross-holdings).
+  // Prefer the CostOfCapital.mv_debt_total (includes lease PV and
+  // convertible straight part) when available, falling back to raw bv_debt.
+  const debt = data.cost_of_capital?.mv_debt_total ?? fin0.bv_debt;
+  const minorityInterests = fin0.minority_interests ?? 0;
   const cash = fin0.cash_and_marketable_securities;
-  const nonOpAssets = 0; // not in current schema — placeholder
+  const nonOpAssets = fin0.cross_holdings ?? 0;
 
   const equityValue = dcf?.value_of_equity;
   const optionsValue = data.final?.value_of_all_options;
@@ -277,12 +299,15 @@ export default function ValuationOutput({ data, onPatch, onPatchMany }: Props) {
               projTip('year {i}', 'EBIT_t = Rev_t × margin_t (Ginzu: explicit compound, not EBIT×(1+growth))'))}
             {projRow(
               'Tax rate',
-              Array(colCount).fill(taxRate),
+              taxRatePerYear,
               'pct',
-              formula('Marginal tax rate (constant)', `Country tax = ${pct(taxRate)} from countrytaxrates.xls`),
+              formula(
+                'Effective in base year, converges to marginal over the projection',
+                `Base = ${pct(macro.tax_rate_effective)} (what the firm actually paid); terminal → ${pct(macro.tax_rate_marginal)} (marginal). Per-year value back-calculated from the engine's FCFF + Reinvestment so it reconciles exactly with the EBIT(1-t) row below.`,
+              ),
             )}
             {projRow('EBIT(1-t)', ebitAfterTax, 'num',
-              formula('EBIT × (1 − marginal tax rate). NOL carryforward can shield early-year income.'))}
+              formula('EBIT × (1 − tax rate) using the per-year tax rate shown above (NOT a flat marginal rate). Matches the engine\'s NOPAT.'))}
             {projRow('Reinvestment', reinvestment, 'num',
               projTip('year {i}', 'Sales-to-capital method: Reinvest_t = (Rev_t − Rev_{t−lag}) / (S/C ratio). Lag = 1 year default.'))}
             {projRow('FCFF', fcff, 'num',

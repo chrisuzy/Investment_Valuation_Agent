@@ -622,6 +622,24 @@ async def fetch_from_file(
         except Exception:
             pass
 
+    # Derive the listing→reporting FX rate BEFORE the raw-financials loop
+    # so the reporting-currency mv_equity fallback (when the CIQ template
+    # lacks mv_equity_reporting) can reference fx_rate. Earlier the fx_rate
+    # was computed AFTER the loop — any foreign-listed ticker without
+    # mv_equity_reporting crashed the upload with NameError on fx_rate.
+    fx_rate = None
+    fx_rate_source = "unknown"
+    sp_listing_cur = _fval_or_none(current, "stock_price")
+    sp_reporting_cur = _fval_or_none(current, "stock_price_reporting")
+    if reporting_currency and stock_price_currency and reporting_currency == stock_price_currency:
+        fx_rate = 1.0
+        fx_rate_source = "same currency"
+    elif sp_listing_cur and sp_reporting_cur and sp_listing_cur > 0:
+        fx_rate = sp_reporting_cur / sp_listing_cur
+        fx_rate_source = "CIQ implied"
+    elif sp_listing_cur and sp_reporting_cur is None:
+        fx_rate_source = "unavailable (CIQ template missing stock_price_reporting)"
+
     raw_financials = []
     for fy_offset in sorted(annual.keys()):
         data = annual[fy_offset]
@@ -792,21 +810,8 @@ async def fetch_from_file(
     # Get CIQ-fetched effective tax rate (from current/market data)
     effective_tax_rate_ciq_val = _fval_or_none(current, "effective_tax_rate_ciq")
 
-    # Derive FX rate (listing → reporting) from the two CIQ stock-price variants.
-    # Only valid when BOTH are present and non-zero. Otherwise mark unavailable
-    # and downstream math falls back to listing-currency mv_equity (with warning).
-    fx_rate = None
-    fx_rate_source = "unknown"
-    sp_listing = _fval_or_none(current, "stock_price")
-    sp_reporting = _fval_or_none(current, "stock_price_reporting")
-    if reporting_currency and stock_price_currency and reporting_currency == stock_price_currency:
-        fx_rate = 1.0
-        fx_rate_source = "same currency"
-    elif sp_listing and sp_reporting and sp_listing > 0:
-        fx_rate = sp_reporting / sp_listing
-        fx_rate_source = "CIQ implied"
-    elif sp_listing and sp_reporting is None:
-        fx_rate_source = "unavailable (CIQ template missing stock_price_reporting)"
+    # fx_rate / fx_rate_source already computed above before the
+    # raw-financials loop; no recomputation needed here.
 
     # Geographic segments: run through the resolver (exact → alias → composite →
     # weak default → unresolved). Each segment arrives with a SegmentResolution
