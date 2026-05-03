@@ -47,7 +47,7 @@
 
 ## 🤯 The problem
 
-Every finance student learns Aswath Damodaran's DCF framework. Every investment analyst ends up in a 40-tab Excel workbook that nobody understands, not even its author 6 months later. The math is correct but the provenance is lost — **where did that β come from? Is the WACC in USD or HKD? What happens if we change the ERP approach? Why does Lenovo's D/E look wrong?**
+Every finance student learns Aswath Damodaran's DCF framework. Every investment analyst ends up in a 40-tab Excel workbook that nobody understands, not even its author 6 months later. The math is correct but the provenance is lost — **where did that β come from? Is the WACC in USD or HKD? What happens if we change the ERP approach? Why does NVDA's D/E look wrong?**
 
 Spreadsheets answer none of these questions. Their authors often can't either.
 
