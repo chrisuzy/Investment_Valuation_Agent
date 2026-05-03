@@ -163,18 +163,28 @@ def run_full_valuation(
         adjusted=report.adjusted,
         tax_rate=tax_rate_for_roic,
     )
-    # Preserve any user-supplied std_dev_stock / marginal_sales_to_capital
-    # by only overwriting null fields on the input.
+    # All of these fields are DERIVED from raw financials + module outputs,
+    # so they MUST refresh on every run. Previously we only filled null
+    # fields, which caused a subtle bug after PATCH: the session's
+    # company_metrics still held the prior run's cost_of_capital (non-null),
+    # so the Input Sheet's "Company WACC" got stuck at the old value while
+    # the Cost of Capital page showed the freshly-computed one. Always
+    # overwrite.
     existing = inputs.company_metrics
+    _DERIVED_CM_FIELDS = (
+        "revenue_growth", "pretax_operating_margin", "sales_to_capital",
+        "marginal_sales_to_capital", "roic", "cost_of_capital",
+    )
     if existing is None:
         inputs.company_metrics = computed_cm
     else:
-        for field_name in (
-            "revenue_growth", "pretax_operating_margin", "sales_to_capital",
-            "marginal_sales_to_capital", "roic", "cost_of_capital",
-        ):
-            if getattr(existing, field_name, None) is None:
-                setattr(existing, field_name, getattr(computed_cm, field_name))
+        for field_name in _DERIVED_CM_FIELDS:
+            setattr(existing, field_name, getattr(computed_cm, field_name))
+        # std_dev_stock is the only genuinely user-supplied field — if the
+        # computed_cm doesn't know a value (we don't have a volatility
+        # calculator yet) keep whatever the user passed.
+        if computed_cm.std_dev_stock is not None:
+            existing.std_dev_stock = computed_cm.std_dev_stock
 
     return report
 

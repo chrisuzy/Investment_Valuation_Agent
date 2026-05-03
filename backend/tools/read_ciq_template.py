@@ -91,16 +91,27 @@ def read_ciq_template(file_path: str | Path) -> dict:
                 period_dates[variable] = formatted
         elif period == "current":
             current[variable] = value
-        elif "FQ-" in period:
-            q_offset = int(period.split("FQ-")[1])
+        elif "FQ-" in str(period):
+            q_offset = int(str(period).split("FQ-")[1])
             if q_offset not in quarterly:
                 quarterly[q_offset] = {}
             quarterly[q_offset][variable] = value
-        elif "FY-" in period:
-            fy_offset = int(period.split("FY-")[1])
+        elif "FY-" in str(period):
+            fy_offset = int(str(period).split("FY-")[1])
             if fy_offset not in annual:
                 annual[fy_offset] = {}
             annual[fy_offset][variable] = value
+        else:
+            # Row didn't match any routing pattern — log so this can't
+            # silently drop data the way effective_tax_rate_ciq did
+            # (its row-map period was "IQ_FY" instead of "current", and
+            # the resolved value just disappeared).
+            import logging
+            logging.getLogger(__name__).warning(
+                "read_ciq_template: row %s variable=%r period=%r matched no "
+                "routing pattern (expected 'current' | 'FQ-N' | 'FY-N'); "
+                "value dropped: %r", row, variable, period, value,
+            )
 
     wb.close()
 

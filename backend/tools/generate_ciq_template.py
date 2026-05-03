@@ -206,9 +206,15 @@ def generate_template(default_ticker: str = "NVDA") -> Path:
             continue
         add_formula_row(field.variable_name, field.mnemonic, "current", field.description)
 
-    # Effective tax rate: special formula with /100 (CIQ returns percentage, we need decimal)
-    add_formula_row("effective_tax_rate_ciq", "IQ_EFFECT_TAX_RATE", "IQ_FY", "Effective Tax Rate (CIQ, /100)")
-    # Override the formula in the last row to add /100
+    # Effective tax rate: special formula with /100 (CIQ returns percentage, we need decimal).
+    # Row-map period MUST be "current" so the reader routes the resolved value into
+    # `current["effective_tax_rate_ciq"]`. Earlier we used "IQ_FY" here (matching the
+    # 3rd CIQ argument) but that string doesn't match the reader's "current" /
+    # "FQ-N" / "FY-N" routing, so the fetched value was silently dropped — the cell
+    # resolved correctly in Excel but the backend never picked it up.
+    add_formula_row("effective_tax_rate_ciq", "IQ_EFFECT_TAX_RATE", "current", "Effective Tax Rate (CIQ, /100)")
+    # Override the formula in the last row to add /100 and use IQ_FY as the
+    # actual CIQ 3rd-argument (period inside the formula, not the row-map).
     tax_row = row - 1
     ws.cell(tax_row, 3).value = '=_xll.ciqfunctions.udf.CIQ($B$1,"IQ_EFFECT_TAX_RATE","IQ_FY")/100'
 
