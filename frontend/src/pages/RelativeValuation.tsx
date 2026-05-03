@@ -96,9 +96,9 @@ export default function RelativeValuation({ data }: { data: ValuationResponse; s
       <h1 className="text-xl font-bold mb-1">Relative Valuation — Intrinsic vs Market Multiples</h1>
       <p className="text-sm text-gray-600 mb-4">
         Compare what the market prices this firm at versus what our intrinsic valuation implies.
-        <span className="inline-block bg-green-100 border border-green-300 px-2 ml-2">Green = intrinsic (from DCF)</span>
-        <span className="inline-block bg-blue-100 border border-blue-300 px-2 ml-1">Blue = market-observed</span>
-        <span className="inline-block bg-purple-100 border border-purple-300 px-2 ml-1">Purple = industry benchmark</span>
+        <span className="inline-block bg-emerald-50 border border-emerald-200 px-2 ml-2 rounded-sm">Intrinsic (DCF)</span>
+        <span className="inline-block bg-sky-50 border border-sky-200 px-2 ml-1 rounded-sm">Market-observed</span>
+        <span className="inline-block bg-slate-50 border border-slate-200 px-2 ml-1 rounded-sm">Industry benchmark</span>
       </p>
 
       <SpreadsheetGrid title="Multiples Comparison">

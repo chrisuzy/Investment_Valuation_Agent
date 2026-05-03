@@ -16,14 +16,22 @@ interface SpreadsheetCellProps {
   tooltip?: string;
 }
 
+// Soft, low-saturation tints. Each cell type keeps a distinct color family
+// so the Input vs Retrieved vs Computed distinction stays readable, but the
+// overall palette is calm enough for extended analyst use.
+//
+//   hypothesis (manual input)  → amber    — "you can change this"
+//   financial  (CIQ / raw)     → sky      — "pulled in as-is"
+//   reference  (Damodaran etc) → slate    — "external reference, no color"
+//   calc       (engine output) → emerald  — "we computed this"
 const TYPE_STYLES: Record<CellType, string> = {
-  hypothesis: 'bg-yellow-100 border-yellow-300',
-  financial: 'bg-blue-100 border-blue-300',
-  reference: 'bg-purple-100 border-purple-300',
-  calc: 'bg-green-100 border-green-300',
-  label: 'bg-white border-gray-200',
-  hint: 'bg-white border-gray-200 text-red-500 text-xs italic',
-  header: 'bg-gray-100 border-gray-300 font-bold text-center',
+  hypothesis: 'bg-amber-50 border-amber-200 text-slate-800',
+  financial:  'bg-sky-50 border-sky-200 text-slate-800',
+  reference:  'bg-slate-50 border-slate-200 text-slate-700',
+  calc:       'bg-emerald-50 border-emerald-200 text-slate-900',
+  label:      'bg-white border-slate-200 text-slate-700',
+  hint:       'bg-amber-50/60 border-slate-200 text-amber-700 text-xs italic',
+  header:     'bg-slate-100 border-slate-300 font-semibold text-center text-slate-700',
 };
 
 const ALIGN_MAP = { left: 'text-left', center: 'text-center', right: 'text-right' };
@@ -90,7 +98,7 @@ export default function SpreadsheetCell({
     <td
       colSpan={colSpan}
       rowSpan={rowSpan}
-      className={`relative group ${baseClasses} ${editable ? 'cursor-pointer hover:ring-2 hover:ring-yellow-400' : ''} ${hasTip ? 'cursor-help hover:ring-1 hover:ring-gray-400' : ''}`}
+      className={`relative group ${baseClasses} ${editable ? 'cursor-pointer hover:ring-2 hover:ring-amber-400' : ''} ${hasTip ? 'cursor-help hover:ring-1 hover:ring-slate-400' : ''}`}
       onDoubleClick={startEdit}
       style={width ? { width } : undefined}
       title={tooltip}

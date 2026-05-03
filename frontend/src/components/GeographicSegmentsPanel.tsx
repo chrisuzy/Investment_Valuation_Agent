@@ -166,7 +166,7 @@ export default function GeographicSegmentsPanel({ data, onPatch }: Props) {
           </button>
         )}
         {usingBlended && (
-          <div className="shrink-0 text-xs bg-green-100 border border-green-300 text-green-800 px-2 py-1 rounded font-semibold">
+          <div className="shrink-0 text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-1 rounded font-semibold">
             ✓ Active in WACC
           </div>
         )}

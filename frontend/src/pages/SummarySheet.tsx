@@ -127,10 +127,10 @@ export default function SummarySheet({ data }: { data: ValuationResponse; sessio
       <h1 className="text-xl font-bold mb-1">Summary Sheet — Year-by-Year DCF</h1>
       <p className="text-sm text-gray-600 mb-4">
         Base year + 10-year explicit projection + terminal row. Columns color-coded:
-        <span className="inline-block bg-blue-100 border border-blue-300 px-2 ml-2">Base</span>
-        <span className="inline-block bg-green-100 border border-green-300 px-2 ml-1">High Growth (Yr 1-5)</span>
-        <span className="inline-block bg-green-100 border border-green-300 px-2 ml-1">Transition (Yr 6-10)</span>
-        <span className="inline-block bg-purple-100 border border-purple-300 px-2 ml-1">Terminal</span>
+        <span className="inline-block bg-sky-50 border border-sky-200 px-2 ml-2 rounded-sm">Base</span>
+        <span className="inline-block bg-emerald-50 border border-emerald-200 px-2 ml-1 rounded-sm">High Growth (Yr 1-5)</span>
+        <span className="inline-block bg-teal-50 border border-teal-200 px-2 ml-1 rounded-sm">Transition (Yr 6-10)</span>
+        <span className="inline-block bg-slate-100 border border-slate-300 px-2 ml-1 rounded-sm">Terminal</span>
       </p>
 
       <SpreadsheetGrid title="Year-by-Year DCF Projection">
@@ -302,14 +302,14 @@ export default function SummarySheet({ data }: { data: ValuationResponse; sessio
           </tr>
           <tr>
             <SpreadsheetCell value={`Value per Share (final, ${data.inputs.reporting_currency || '?'})`} type="label" bold />
-            <td className="border px-1.5 py-0.5 bg-green-100 border-green-300 text-right whitespace-nowrap font-bold"
+            <td className="border px-1.5 py-0.5 bg-emerald-50 border-emerald-200 text-right whitespace-nowrap font-bold"
                 title="After subtracting option dilution — in reporting currency">
               <DualCurrency valueReporting={data.final?.value_per_share} reportingCcy={data.inputs.reporting_currency} listingCcy={data.inputs.stock_price_currency} fxRate={data.inputs.fx_rate} />
             </td>
           </tr>
           <tr>
             <SpreadsheetCell value={`Market Price (${data.inputs.stock_price_currency || '?'})`} type="label" />
-            <td className="border px-1.5 py-0.5 bg-blue-100 border-blue-300 text-right whitespace-nowrap"
+            <td className="border px-1.5 py-0.5 bg-sky-50 border-sky-200 text-right whitespace-nowrap"
                 title={`Stock price in listing currency ${data.inputs.stock_price_currency || '?'}; also shown converted to reporting ccy ${data.inputs.reporting_currency || '?'} for apples-to-apples vs VPS`}>
               <DualCurrency valueListing={fin0?.stock_price} reportingCcy={data.inputs.reporting_currency} listingCcy={data.inputs.stock_price_currency} fxRate={data.inputs.fx_rate} primary="listing" />
             </td>

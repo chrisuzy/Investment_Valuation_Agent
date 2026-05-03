@@ -141,7 +141,7 @@ export default function TrailingTwelveMonth({ data }: { data: ValuationResponse;
           </tr>
           <tr>
             <SpreadsheetCell value="LTM Formula" type="label" />
-            <td className="border px-2 py-1 bg-gray-50 text-xs font-mono">
+            <td className="border px-2 py-1 bg-slate-50 text-xs font-mono">
               {n === 0
                 ? 'LTM = FY0 (no new quarters since 10-K)'
                 : `LTM = FY0 + (${Array.from({length: n}, (_, i) => `FQ-${i}`).join(' + ')}) - (${Array.from({length: n}, (_, i) => `FQ-${i+4}`).join(' + ')})`
@@ -174,7 +174,7 @@ export default function TrailingTwelveMonth({ data }: { data: ValuationResponse;
               {Array.from({length: maxQ}, (_, i) => {
                 const isNew = i < n;
                 const isOld = i >= 4 && i < 4 + n;
-                const bg = isNew ? 'bg-green-100' : isOld ? 'bg-red-100' : 'bg-gray-50';
+                const bg = isNew ? 'bg-emerald-50' : isOld ? 'bg-rose-50' : 'bg-slate-50';
                 const label = isNew ? `FQ-${i} (+)` : isOld ? `FQ-${i} (-)` : `FQ-${i}`;
                 return <th key={`qh-${i}`} className={`border px-1.5 py-0.5 text-xs font-bold text-center whitespace-nowrap ${bg}`}>{label}</th>;
               })}
@@ -252,15 +252,15 @@ export default function TrailingTwelveMonth({ data }: { data: ValuationResponse;
               <tr>
                 <SpreadsheetCell value="  Operating Margin (%)" type="label" />
                 <SpreadsheetCell value={pct(fy0Margin)} type="calc" tooltip="= FY0 EBIT / FY0 Revenue" />
-                {n > 0 && <td className="border bg-gray-50" />}
-                {n > 0 && <td className="border bg-gray-50" />}
+                {n > 0 && <td className="border bg-slate-50" />}
+                {n > 0 && <td className="border bg-slate-50" />}
                 <SpreadsheetCell value={pct(margin)} type="calc" tooltip="= LTM EBIT / LTM Revenue" />
               </tr>
               <tr>
                 <SpreadsheetCell value="  Effective Tax Rate (%)" type="label" />
                 <SpreadsheetCell value={pct(fy0Tax)} type="calc" tooltip="= FY0 Tax / FY0 EBT" />
-                {n > 0 && <td className="border bg-gray-50" />}
-                {n > 0 && <td className="border bg-gray-50" />}
+                {n > 0 && <td className="border bg-slate-50" />}
+                {n > 0 && <td className="border bg-slate-50" />}
                 <SpreadsheetCell value={pct(effTax)} type="calc" tooltip="= LTM Tax / LTM EBT" />
               </tr>
             </>);

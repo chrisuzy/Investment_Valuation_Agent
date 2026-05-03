@@ -1,7 +1,9 @@
 import type { ValuationResponse } from '../types/valuation';
+import type { PatchValue } from '../api/client';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
+import SensitivityPanel from '../components/SensitivityPanel';
 import { ciq, formula, backendField, user } from '../lib/sources';
 import DualCurrency from '../components/DualCurrency';
 import { fmtMoneyShort } from '../lib/currency';
@@ -26,7 +28,13 @@ function fmtNum(v: number | string | null | undefined): number | string {
 
 // ---------- component ----------
 
-export default function ValuationOutput({ data, sessionId }: { data: ValuationResponse; sessionId?: string | null }) {
+interface Props {
+  data: ValuationResponse;
+  sessionId?: string | null;
+  onPatch?: (path: string, value: PatchValue) => void | Promise<void>;
+}
+
+export default function ValuationOutput({ data, onPatch }: Props) {
   const dcf = data.dcf;
   const inputs = data.inputs;
   const fin0 = inputs.raw_financials[0]; // base-year financials
@@ -331,21 +339,21 @@ export default function ValuationOutput({ data, sessionId }: { data: ValuationRe
               <>
                 <tr>
                   <SpreadsheetCell value="Value per share (reporting ccy)" type="label" align="left" width="320px" />
-                  <td className="border px-1.5 py-0.5 bg-green-100 border-green-300 text-right whitespace-nowrap"
+                  <td className="border px-1.5 py-0.5 bg-emerald-50 border-emerald-200 text-right whitespace-nowrap"
                       title={formula('VPS = V_equity_common / shares') + ' — ' + backendField('final.value_per_share')}>
                     <DualCurrency valueReporting={vpsReporting} reportingCcy={repCcy} listingCcy={listCcy} fxRate={fxRate} />
                   </td>
                 </tr>
                 <tr>
                   <SpreadsheetCell value="Current market price (listing ccy)" type="label" align="left" width="320px" />
-                  <td className="border px-1.5 py-0.5 bg-green-100 border-green-300 text-right whitespace-nowrap"
+                  <td className="border px-1.5 py-0.5 bg-emerald-50 border-emerald-200 text-right whitespace-nowrap"
                       title={ciq(inputs.ticker, 'IQ_CLOSEPRICE') + ` — displayed in listing ccy ${listCcy || '?'}; also shown converted to reporting ccy ${repCcy || '?'} for apples-to-apples comparison with VPS`}>
                     <DualCurrency valueListing={marketListing} reportingCcy={repCcy} listingCcy={listCcy} fxRate={fxRate} primary="listing" />
                   </td>
                 </tr>
                 <tr>
                   <SpreadsheetCell value="Price / Value (reporting-ccy basis)" type="label" align="left" width="320px" />
-                  <td className="border px-1.5 py-0.5 bg-green-100 border-green-300 text-right whitespace-nowrap font-bold"
+                  <td className="border px-1.5 py-0.5 bg-emerald-50 border-emerald-200 text-right whitespace-nowrap font-bold"
                       title={`Market ${fmtMoneyShort(marketForCompare, repCcy)} / VPS ${fmtMoneyShort(vpsReporting, repCcy)} — both in ${repCcy || '?'}. > 1 = overvalued on DCF; < 1 = undervalued.`}>
                     {ratio != null ? `${ratio.toFixed(2)}x` : '—'}
                   </td>
@@ -355,6 +363,8 @@ export default function ValuationOutput({ data, sessionId }: { data: ValuationRe
           })()}
         </tbody>
       </SpreadsheetGrid>
+
+      <SensitivityPanel data={data} onPatch={onPatch} />
     </div>
   );
 }

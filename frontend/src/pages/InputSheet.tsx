@@ -51,7 +51,7 @@ function YesNoSelect({ value, dotPath, onUpdate }: {
   onUpdate: (path: string, val: boolean) => void;
 }) {
   return (
-    <td className="border px-2 py-1 text-sm bg-yellow-100 border-yellow-300">
+    <td className="border px-2 py-1 text-sm bg-amber-50 border-amber-200">
       <select
         value={value ? 'Yes' : 'No'}
         onChange={(e) => onUpdate(dotPath, e.target.value === 'Yes')}
@@ -866,7 +866,7 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
               </tr>
               <tr>
                 <SpreadsheetCell value="Failure Tied To" type="label" />
-                <td className="border px-2 py-1 text-sm bg-yellow-100 border-yellow-300">
+                <td className="border px-2 py-1 text-sm bg-amber-50 border-amber-200">
                   <select
                     value={va.failure_tie_to}
                     onChange={(e) => update('valuation_assumptions.failure_tie_to', e.target.value)}
