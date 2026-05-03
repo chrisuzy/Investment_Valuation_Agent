@@ -440,9 +440,33 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
       {/* ----------------------------------------------------------------- */}
       <SpreadsheetGrid title="6. Tax Rates">
         <tbody>
-          <tr><SpreadsheetCell value="Effective Tax Rate (CIQ)" type="label" width="200px" /><SpreadsheetCell value={pct(inp.effective_tax_rate_ciq)} type="financial" tooltip={`=CIQ("${inp.ticker}","IQ_EFFECT_TAX_RATE","IQ_FY")/100`} /></tr>
-          <tr><SpreadsheetCell value="Effective Tax Rate (Calculated)" type="label" /><SpreadsheetCell value={pct(macro.tax_rate_effective)} type="calc" tooltip="= Tax Expense / Earnings Before Tax" /></tr>
-          <tr><SpreadsheetCell value="Marginal Tax Rate" type="label" /><SpreadsheetCell value={pct(macro.tax_rate_marginal)} type="reference" tooltip="Source: countrytaxrates.xls (Damodaran)" /></tr>
+          <tr>
+            <SpreadsheetCell value="Effective Tax Rate (CIQ)" type="label" width="200px" />
+            <SpreadsheetCell
+              value={inp.effective_tax_rate_ciq == null ? '—' : pct(inp.effective_tax_rate_ciq)}
+              type="financial"
+              tooltip={inp.effective_tax_rate_ciq == null
+                ? `CIQ formula =CIQ("${inp.ticker}","IQ_EFFECT_TAX_RATE","IQ_FY")/100 returned no data for this ticker (some firms don't publish an effective tax rate in CIQ's feed). The engine falls back to the "Calculated" row below, which it derives from raw financials as tax_expense / pretax_income — that is the number actually used for WACC and DCF.`
+                : `=CIQ("${inp.ticker}","IQ_EFFECT_TAX_RATE","IQ_FY")/100 — S&P's derived effective tax rate.`
+              }
+            />
+          </tr>
+          <tr>
+            <SpreadsheetCell value="Effective Tax Rate (Calculated)" type="label" />
+            <SpreadsheetCell
+              value={pct(macro.tax_rate_effective)}
+              type="calc"
+              tooltip={`= |total_tax_expense| / |earnings_before_tax| from FY-0 raw financials. This is the rate the engine USES for base-year NOPAT, ROIC, and EV/Sales. Independent of the CIQ row above — if that one is blank, this one is your source of truth.`}
+            />
+          </tr>
+          <tr>
+            <SpreadsheetCell value="Marginal Tax Rate" type="label" />
+            <SpreadsheetCell
+              value={pct(macro.tax_rate_marginal)}
+              type="reference"
+              tooltip="Source: countrytaxrates.xls (Damodaran). Used for DCF projections (year 1..terminal) — Damodaran's convention is effective tax for the base year, marginal for the forecast."
+            />
+          </tr>
         </tbody>
       </SpreadsheetGrid>
 
@@ -688,7 +712,14 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
           <tr><SpreadsheetCell value="Equity Risk Premium (ERP)" type="label" /><SpreadsheetCell value={pct(macro.equity_risk_premium)} type="reference" tooltip="Source: ctryprem.xlsx (Damodaran)" /></tr>
           <tr><SpreadsheetCell value="Country Risk Premium (CRP)" type="label" /><SpreadsheetCell value={pct(macro.country_risk_premium)} type="reference" tooltip="Source: ctryprem.xlsx (Damodaran)" /></tr>
           <tr><SpreadsheetCell value="Default Spread" type="label" /><SpreadsheetCell value={pct(macro.default_spread)} type="reference" tooltip="Source: ctryprem.xlsx (Damodaran)" /></tr>
-          <tr><SpreadsheetCell value="Initial WACC" type="label" /><SpreadsheetCell value={pct(coc?.wacc)} type="calc" /></tr>
+          <tr>
+            <SpreadsheetCell value="WACC (from Cost of Capital module)" type="label" />
+            <SpreadsheetCell
+              value={pct(coc?.wacc)}
+              type="calc"
+              tooltip={`Same value as the WACC shown on the Cost of Capital page — computed by Module 2 from the levered beta, ERP, Kd, and capital-structure weights. Summarized here as the year-1 discount rate used by the DCF. Change it by editing any upstream input (beta approach, ERP approach, Kd approach, debt/equity mix) on the Cost of Capital page.`}
+            />
+          </tr>
         </tbody>
       </SpreadsheetGrid>
 

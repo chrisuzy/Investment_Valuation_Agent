@@ -1,6 +1,7 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { useState, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
+import ErrorBoundary from './components/ErrorBoundary';
 import OnboardingWizard from './components/OnboardingWizard';
 import InputSheet from './pages/InputSheet';
 import ValuationOutput from './pages/ValuationOutput';
@@ -108,27 +109,63 @@ export default function App() {
             )}
             <CurrencyBanner data={data} />
             <UnresolvedFieldsPanel data={data} onPatch={handleCellUpdate} />
-            <Routes>
-              <Route path="/"                  element={<InputSheet data={data} sessionId={sessionId} onUpdate={handleCellUpdate} />} />
-              <Route path="/summary"           element={<SummarySheet data={data} sessionId={sessionId} />} />
-              <Route path="/valuation-output"  element={<ValuationOutput data={data} sessionId={sessionId} onPatch={handleCellUpdate} onPatchMany={handlePatchMany} />} />
-              <Route path="/relative"          element={<RelativeValuation data={data} sessionId={sessionId} />} />
-              <Route path="/stories"           element={<StoriesToNumbers data={data} sessionId={sessionId} />} />
-              <Route path="/picture"           element={<ValuationPicture data={data} sessionId={sessionId} />} />
-              <Route path="/diagnostics"       element={<Diagnostics data={data} sessionId={sessionId} />} />
-              <Route path="/options"           element={<OptionValue data={data} sessionId={sessionId} />} />
-              <Route path="/rating"            element={<SyntheticRating data={data} sessionId={sessionId} />} />
-              <Route path="/rd"                element={<RDConverter data={data} sessionId={sessionId} />} />
-              <Route path="/leases"            element={<LeaseConverter data={data} sessionId={sessionId} />} />
-              <Route path="/wacc"              element={<CostOfCapital data={data} sessionId={sessionId} onPatch={handleCellUpdate} setData={setData} />} />
-              <Route path="/failure"           element={<FailureRate data={data} sessionId={sessionId} onPatch={handleCellUpdate} />} />
-              <Route path="/ttm"               element={<TrailingTwelveMonth data={data} sessionId={sessionId} />} />
-              <Route path="/answers"           element={<AnswerKeys data={data} sessionId={sessionId} />} />
-            </Routes>
+            <RoutedPages
+              data={data}
+              sessionId={sessionId}
+              setData={setData}
+              handleCellUpdate={handleCellUpdate}
+              handlePatchMany={handlePatchMany}
+            />
           </>
         )}
       </main>
     </div>
+  );
+}
+
+/**
+ * The routed page tree, wrapped in an ErrorBoundary keyed by current path.
+ *
+ * Keying the boundary on `pathname` clears any caught error automatically
+ * when the user navigates to a different page — so "Back to Input Sheet"
+ * or any sidebar click recovers from a crash without needing an explicit
+ * retry button. The boundary also resets when `data` changes (new upload),
+ * so stale errors don't survive across valuations.
+ */
+function RoutedPages({
+  data,
+  sessionId,
+  setData,
+  handleCellUpdate,
+  handlePatchMany,
+}: {
+  data: ValuationResponse;
+  sessionId: string | null;
+  setData: React.Dispatch<React.SetStateAction<ValuationResponse | null>>;
+  handleCellUpdate: (path: string, value: PatchValue) => Promise<void>;
+  handlePatchMany: (overrides: Record<string, PatchValue>) => Promise<void>;
+}) {
+  const { pathname } = useLocation();
+  return (
+    <ErrorBoundary resetKey={`${pathname}::${sessionId ?? ''}`}>
+      <Routes>
+        <Route path="/"                  element={<InputSheet data={data} sessionId={sessionId} onUpdate={handleCellUpdate} />} />
+        <Route path="/summary"           element={<SummarySheet data={data} sessionId={sessionId} />} />
+        <Route path="/valuation-output"  element={<ValuationOutput data={data} sessionId={sessionId} onPatch={handleCellUpdate} onPatchMany={handlePatchMany} />} />
+        <Route path="/relative"          element={<RelativeValuation data={data} sessionId={sessionId} />} />
+        <Route path="/stories"           element={<StoriesToNumbers data={data} sessionId={sessionId} />} />
+        <Route path="/picture"           element={<ValuationPicture data={data} sessionId={sessionId} />} />
+        <Route path="/diagnostics"       element={<Diagnostics data={data} sessionId={sessionId} />} />
+        <Route path="/options"           element={<OptionValue data={data} sessionId={sessionId} />} />
+        <Route path="/rating"            element={<SyntheticRating data={data} sessionId={sessionId} />} />
+        <Route path="/rd"                element={<RDConverter data={data} sessionId={sessionId} />} />
+        <Route path="/leases"            element={<LeaseConverter data={data} sessionId={sessionId} />} />
+        <Route path="/wacc"              element={<CostOfCapital data={data} sessionId={sessionId} onPatch={handleCellUpdate} setData={setData} />} />
+        <Route path="/failure"           element={<FailureRate data={data} sessionId={sessionId} onPatch={handleCellUpdate} />} />
+        <Route path="/ttm"               element={<TrailingTwelveMonth data={data} sessionId={sessionId} />} />
+        <Route path="/answers"           element={<AnswerKeys data={data} sessionId={sessionId} />} />
+      </Routes>
+    </ErrorBoundary>
   );
 }
 

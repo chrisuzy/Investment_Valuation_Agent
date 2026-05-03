@@ -210,12 +210,18 @@ export default function Diagnostics({ data, sessionId }: { data: ValuationRespon
             <SpreadsheetCell value={valuePerShare} type="calc" />
           </tr>
           <tr>
-            <SpreadsheetCell value="Stock price" type="label" />
-            <SpreadsheetCell value={stockPrice} type="financial" />
+            <SpreadsheetCell value={`Stock price (${listingCcy ?? '—'}, listing ccy)`} type="label" />
+            <SpreadsheetCell value={stockPriceListing} type="financial"
+              tooltip={fxRate != null && !sameCcy && stockPriceInReporting != null
+                ? `≈ ${stockPriceInReporting.toFixed(2)} ${reportingCcy} at FX ${fxRate.toFixed(4)}`
+                : undefined}
+            />
           </tr>
           <tr>
-            <SpreadsheetCell value="Price as % of value" type="label" />
-            <SpreadsheetCell value={priceAsPctOfValue} type="calc" />
+            <SpreadsheetCell value="Price as % of value (same currency)" type="label" />
+            <SpreadsheetCell value={priceAsPctOfValue} type="calc"
+              tooltip={`Market price converted to ${reportingCcy ?? 'reporting ccy'} and divided by VPS, so both sides are in the same currency.`}
+            />
           </tr>
           <tr>
             <SpreadsheetCell

@@ -101,15 +101,43 @@ export default function SpreadsheetCell({
       className={`relative group ${baseClasses} ${editable ? 'cursor-pointer hover:ring-2 hover:ring-amber-400' : ''} ${hasTip ? 'cursor-help hover:ring-1 hover:ring-slate-400' : ''}`}
       onDoubleClick={startEdit}
       style={width ? { width } : undefined}
-      title={tooltip}
     >
       {formatValue(value)}
       {hasTip && (
-        <span
-          aria-hidden="true"
-          className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full bg-sky-500 opacity-60 group-hover:opacity-100 pointer-events-none"
-          style={{ transform: 'translate(35%, -35%)' }}
-        />
+        <>
+          {/* Small blue dot indicator in the corner so users can see at a
+              glance which cells have explanatory hover content. */}
+          <span
+            aria-hidden="true"
+            className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full bg-sky-500 opacity-60 group-hover:opacity-100 pointer-events-none"
+            style={{ transform: 'translate(35%, -35%)' }}
+          />
+          {/* Custom hover popover — appears instantly on group-hover, unlike
+              the browser-native `title` attribute which has a ~1s delay and
+              variable per-browser styling. Positioned above the cell by
+              default; flips below via CSS when space is tight at the top
+              of the viewport (handled implicitly by max-height + overflow). */}
+          <span
+            role="tooltip"
+            className={
+              'pointer-events-none absolute z-40 hidden group-hover:block ' +
+              'left-1/2 -translate-x-1/2 bottom-full mb-1.5 ' +
+              'min-w-[220px] max-w-[420px] px-3 py-2 rounded-md shadow-lg ' +
+              'bg-slate-900 text-white text-[11px] font-normal leading-snug text-left whitespace-pre-wrap break-words'
+            }
+          >
+            {tooltip}
+            <span
+              aria-hidden="true"
+              className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0"
+              style={{
+                borderLeft: '5px solid transparent',
+                borderRight: '5px solid transparent',
+                borderTop: '5px solid rgb(15 23 42)',  // matches bg-slate-900
+              }}
+            />
+          </span>
+        </>
       )}
     </td>
   );
