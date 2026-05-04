@@ -124,7 +124,8 @@ export default function SyntheticRating({ data, sessionId }: { data: ValuationRe
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="Rating branch trace" />
-            <SpreadsheetCell type="reference" value={engineKdBranch ?? '—'} />
+            <SpreadsheetCell type="reference" value={engineKdBranch ?? '—'}
+              tooltip="Concrete branch label from the cost-of-capital engine trace — which specific path produced the Kd that WACC is using. Useful when you want to verify (vs the Kd approach above) which rating table was consulted." />
           </tr>
           {engineActualRating && (
             <tr>
