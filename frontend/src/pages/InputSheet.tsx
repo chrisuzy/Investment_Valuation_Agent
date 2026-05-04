@@ -639,7 +639,11 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
 
             {/* Sales-to-Capital Yr 1-5 */}
             <tr>
-              <SpreadsheetCell value="Sales / Capital — Years 1-5" type="label" />
+              <SpreadsheetCell
+                value="Sales / Capital — Years 1-5"
+                type="label"
+                tooltip={'Reinvestment = ΔRevenue / Sales-to-Capital. Two values (high-growth and stable) reflect that capital efficiency typically changes as a firm matures. Folder reference: module_05_dcf_projection.md §3.6.'}
+              />
               <EditableNum value={va.sales_to_capital_high} dotPath="valuation_assumptions.sales_to_capital_high" format="dec" onUpdate={update} />
               <SpreadsheetCell value={dec(stoc_now)} type="calc" tooltip={`Implied Sales/Capital = Revenue / (BV Equity + BV Debt - Cash)\nMost recent FY`} />
               <SpreadsheetCell value={dec(stoc_avg_3)} type="calc" tooltip={avgTooltip(3, 'Implied Sales/Capital')} />
@@ -652,7 +656,11 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
 
             {/* Sales-to-Capital Yr 6-10 */}
             <tr>
-              <SpreadsheetCell value="Sales / Capital — Years 6-10" type="label" />
+              <SpreadsheetCell
+                value="Sales / Capital — Years 6-10"
+                type="label"
+                tooltip={'Stable-period Sales/Capital, typically closer to 1–2× for mature firms. Drives reinvestment during the convergence phase (years 6–10). Folder: module_05 §3.6.'}
+              />
               <EditableNum value={va.sales_to_capital_stable} dotPath="valuation_assumptions.sales_to_capital_stable" format="dec" onUpdate={update} />
               <SpreadsheetCell value="—" type="calc" tooltip="Forward assumption — use 10Y avg or industry as anchor" />
               <SpreadsheetCell value={dec(stoc_avg_3)} type="calc" tooltip={avgTooltip(3, 'Implied Sales/Capital')} />

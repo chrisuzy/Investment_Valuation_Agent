@@ -72,8 +72,8 @@ export default function OptionValue({ data, sessionId }: { data: ValuationRespon
                 user('Average strike of outstanding employee options', 'From 10-K footnote on stock-based compensation'))}
               {inputRow('Average expiration (years)', fmtNum(opt.average_maturity),
                 user('Weighted-average remaining life of outstanding options', 'From 10-K footnote'))}
-              {inputRow('Standard deviation', pct(opt.stock_price_std_dev),
-                user('Annualized volatility of stock returns', 'Typically 30-60% for public equities; use 3-5 year rolling std dev of weekly returns × √52'))}
+              {inputRow('Standard deviation (σ)', pct(opt.stock_price_std_dev),
+                user('Annualized volatility of stock returns. Used ONLY for Black-Scholes option valuation on this page — does not feed WACC, the main DCF, or the failure probability overlay.', 'Typically 30–60% for public equities; use 3–5 year rolling std dev of weekly returns × √52'))}
               {inputRow('Dividend yield', pct(opt.dividend_yield),
                 ciq(ticker, 'IQ_DIV_YIELD'))}
               {inputRow('Risk-free rate', pct(macro.risk_free_rate),

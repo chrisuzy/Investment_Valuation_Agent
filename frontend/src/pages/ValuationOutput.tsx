@@ -122,8 +122,10 @@ export default function ValuationOutput({ data, onPatch, onPatchMany }: Props) {
     return (e != null && t != null) ? e * (1 - t) : undefined;
   });
 
-  // Reinvestment
+  // Reinvestment — base-year uses historical (adj_CapEx − adj_D&A + ΔNCWC)
+  // from Module 3; projection years come from the DCF engine.
   const reinvestment: (number | undefined)[] = Array(colCount).fill(undefined);
+  reinvestment[0] = data.cashflow?.reinvestment_firm;
   if (dcf?.reinvestment_projections) {
     dcf.reinvestment_projections.forEach((v, i) => {
       reinvestment[i + 1] = v;
