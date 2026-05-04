@@ -366,7 +366,7 @@ export default function CostOfCapital({ data, onPatch }: Props) {
               <div className="text-xs font-semibold text-gray-700 mb-1">Reference</div>
               <div className="grid grid-cols-3 gap-2 text-xs">
                 <div>Industry Kd pre-tax: <span className="font-mono cursor-help" title={damodaran("wacc.xls", "Cost of Debt (pre-tax)", ind.industry_name)}>{fmtPct(ind.cost_of_debt_pretax)}</span></div>
-                <div>Risk-free rate: <span className="font-mono cursor-help" title={user("Risk-free rate", "10y US Treasury ≈ 4.25%")}>{fmtPct(macro.risk_free_rate)}</span></div>
+                <div>Risk-free rate: <span className="font-mono cursor-help" title={user("Risk-free rate", `10y local-currency sovereign rate for ${data.inputs.country ?? 'this firm'}. Default 4.25% (US). Edit on the Input Sheet → Macro Numbers section.`)}>{fmtPct(macro.risk_free_rate)}</span></div>
                 <div>Country default spread: <span className="font-mono cursor-help" title={countrySrc("DefaultSpread", data.inputs.country || "?")}>{fmtPct(macro.default_spread)}</span></div>
                 <div>Interest expense (LTM): <span className="font-mono cursor-help" title={ciq(ticker, "IQ_INTEREST_EXP", "LTM")}>{fmtCur(fin?.interest_expense)}</span></div>
                 <div>Book debt: <span className="font-mono cursor-help" title={ciq(ticker, "IQ_TOTAL_DEBT", "IQ_FY-0")}>{fmtCur(fin?.bv_debt)}</span></div>

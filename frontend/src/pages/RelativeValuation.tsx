@@ -137,8 +137,9 @@ export default function RelativeValuation({ data }: { data: ValuationResponse; s
       <SpreadsheetGrid title="Underlying Inputs">
         <tbody>
           <tr>
-            <SpreadsheetCell value="Market Cap (MV Equity)" type="label" width="280px" />
-            <SpreadsheetCell value={dec(mvEquity, 0)} type="financial" tooltip={`=CIQ("${data.ticker}","IQ_MARKETCAP")`} />
+            <SpreadsheetCell value={`Market Cap (${data.inputs.reporting_currency ?? '—'}, millions)`} type="label" width="280px" />
+            <SpreadsheetCell value={dec(mvEquity, 0)} type="financial"
+              tooltip={`Market cap in REPORTING currency. Fetched as =CIQ("${data.ticker}","IQ_MARKETCAP","","REPORTED") when the template supplies the reporting-ccy variant; otherwise derived as mv_equity_listing × fx_rate. Paired with bv_debt and cash (also reporting-ccy) to compute EV, P/E_market, and EV/EBITDA_market on a same-currency basis.`} />
           </tr>
           <tr>
             <SpreadsheetCell value="Adjusted MV Debt (incl lease PV)" type="label" />

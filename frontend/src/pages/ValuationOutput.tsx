@@ -358,7 +358,7 @@ export default function ValuationOutput({ data, onPatch, onPatchMany }: Props) {
           {bridgeRow('Value of equity in common stock', equityInCommon,
             formula('= V_equity − Options'))}
           {bridgeRow('Number of shares', sharesOutstanding,
-            ciq(inputs.ticker, 'IQ_BASIC_WEIGHT', 'IQ_FQ-0'))}
+            `Shares outstanding from the LTM base-year snapshot. CIQ mnemonic =CIQ("${inputs.ticker}","IQ_TOTAL_OUTSTANDING_FILING_DATE") — point-in-time shares at the most recent filing date. Falls back to FY-0 if the quarterly snapshot didn't provide a value.`)}
           {(() => {
             const repCcy = inputs.reporting_currency;
             const listCcy = inputs.stock_price_currency;

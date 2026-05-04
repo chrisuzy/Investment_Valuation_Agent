@@ -30,10 +30,34 @@ export default function SyntheticRating({ data, sessionId }: { data: ValuationRe
   const coverage = interest > 0 ? ebit / interest : 999;
   const match = RATING_TABLE.find(r => coverage >= r.minCoverage && coverage < r.maxCoverage);
 
+  // Surface the engine's actual WACC-side values so users can see what
+  // the Cost of Capital module picked up, versus what THIS page's table
+  // would suggest. Disagreement typically means the engine used the
+  // 'actual_rating' branch (fetched from CIQ IQ_SP_ISSUER_RATING),
+  // a different firm-type table (large/financial), or the industry
+  // fallback path.
+  const mc = data.inputs.methodology_choices;
+  const firmType = mc?.synthetic_rating_firm_type ?? 'large';
+  const engineRating = data.cost_of_capital?.synthetic_rating;
+  const engineKdBranch = data.cost_of_capital?.kd_branch_used;
+  const engineKdPretax = data.cost_of_capital?.cost_of_debt_pretax;
+  const engineActualRating = mc?.actual_rating;
+
   return (
     <div className="max-w-5xl">
       <h2 className="text-xl font-bold mb-4">Synthetic Rating</h2>
       <ColorLegend />
+
+      {firmType !== 'small' && (
+        <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-900">
+          <b>Note:</b> the reference table below is the "small firm" Damodaran
+          lookup. Your current methodology selection is firm-type = <b>{firmType}</b>.
+          The engine uses a different coverage-band table for {firmType} firms,
+          so the "Estimated bond rating" cell on this page may disagree with
+          the rating used in the actual WACC calculation. The engine's values
+          are shown at the bottom of this page for cross-check.
+        </div>
+      )}
 
       <SpreadsheetGrid title="Company Interest Coverage">
         <tbody>
@@ -88,6 +112,37 @@ export default function SyntheticRating({ data, sessionId }: { data: ValuationRe
                 tooltip={`Default spread (over RF) for rating ${r.rating}. Source: Damodaran synthetic rating table (Jan 2026), cost_of_capital_reference.json`} />
             </tr>
           ))}
+        </tbody>
+      </SpreadsheetGrid>
+
+      <SpreadsheetGrid title="What the engine actually used (Cost of Capital)">
+        <tbody>
+          <tr>
+            <SpreadsheetCell type="label" value="Kd approach" />
+            <SpreadsheetCell type="reference" value={mc?.kd_approach ?? '—'}
+              tooltip="Which cost-of-debt branch ran. 'actual_rating' = CIQ-fetched S&P rating; 'synthetic_rating' = derived from interest coverage (this page's logic); 'industry_fallback' = Damodaran industry Kd average." />
+          </tr>
+          <tr>
+            <SpreadsheetCell type="label" value="Rating branch trace" />
+            <SpreadsheetCell type="reference" value={engineKdBranch ?? '—'} />
+          </tr>
+          {engineActualRating && (
+            <tr>
+              <SpreadsheetCell type="label" value="Actual rating (CIQ)" />
+              <SpreadsheetCell type="reference" value={engineActualRating}
+                tooltip={`From =CIQ($B$1,"IQ_SP_ISSUER_RATING") fetched by the CIQ template, normalized to the Moody's/S&P compound key. Takes precedence over synthetic rating when available.`} />
+            </tr>
+          )}
+          <tr>
+            <SpreadsheetCell type="label" value="Rating used by engine" bold />
+            <SpreadsheetCell type="calc" value={engineRating ?? match?.rating ?? '—'} bold
+              tooltip="The rating the engine ultimately applied when computing Kd. Compare with the 'Estimated bond rating' in the table above — disagreement means the engine bypassed synthetic-rating logic." />
+          </tr>
+          <tr>
+            <SpreadsheetCell type="label" value="Kd pre-tax (engine)" bold />
+            <SpreadsheetCell type="calc" value={engineKdPretax}
+              tooltip="Cost of debt pre-tax currently feeding the WACC. = RF + credit spread from the rating the engine used." />
+          </tr>
         </tbody>
       </SpreadsheetGrid>
     </div>
