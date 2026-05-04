@@ -202,15 +202,16 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
           <tr>
             <SpreadsheetCell value="Date of Valuation" type="label" width="200px" />
             <SpreadsheetCell value={new Date().toLocaleDateString('en-US')} type="hypothesis" editable
-              onChange={(v) => update('date_of_valuation', v)} />
+              onChange={(v) => update('date_of_valuation', v)}
+              tooltip="As-of date for this valuation. Auto-filled with today; editable so you can reproduce a historical valuation." />
           </tr>
           <tr><SpreadsheetCell value="Company Name" type="label" /><SpreadsheetCell value={inp.company_name ?? ''} type="financial" tooltip="From indname.xlsx industry lookup" /></tr>
-          <tr><SpreadsheetCell value="Ticker" type="label" /><SpreadsheetCell value={inp.ticker} type="financial" /></tr>
+          <tr><SpreadsheetCell value="Ticker" type="label" /><SpreadsheetCell value={inp.ticker} type="financial" tooltip={`CIQ identifier entered on the Upload page (cell B1 of the template). Used as the first argument of every CIQ formula.`} /></tr>
           <tr><SpreadsheetCell value="Country" type="label" /><SpreadsheetCell value={inp.country ?? ''} type="financial" tooltip="From indname.xlsx industry lookup" /></tr>
           <tr><SpreadsheetCell value="Reported Currency" type="label" /><SpreadsheetCell value={inp.reporting_currency ?? ''} type="financial" tooltip={`=CIQ("${inp.ticker}","IQ_FILING_CURRENCY")`} /></tr>
           <tr><SpreadsheetCell value="Stock Price Currency" type="label" /><SpreadsheetCell value={inp.stock_price_currency ?? ''} type="financial" tooltip="Derived from exchange prefix → currency map" /></tr>
-          <tr><SpreadsheetCell value={`Industry (${ind.region})`} type="label" /><SpreadsheetCell value={ind.industry_name} type="reference" /></tr>
-          <tr><SpreadsheetCell value="Industry (Global)" type="label" /><SpreadsheetCell value={indGlobal ? indGlobal.industry_name : 'N/A'} type="reference" /></tr>
+          <tr><SpreadsheetCell value={`Industry (${ind.region})`} type="label" /><SpreadsheetCell value={ind.industry_name} type="reference" tooltip="Damodaran industry classification (regional). From indname.xlsx lookup by ticker. Drives beta, industry margin, industry S/C, industry ROIC reference values." /></tr>
+          <tr><SpreadsheetCell value="Industry (Global)" type="label" /><SpreadsheetCell value={indGlobal ? indGlobal.industry_name : 'N/A'} type="reference" tooltip="Damodaran industry classification (Global aggregate). Shown as a comparison if the primary region is not Global." /></tr>
         </tbody>
       </SpreadsheetGrid>
 
@@ -443,22 +444,22 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
             });
           })()}
           <tr>
-            <SpreadsheetCell value="Years Since Last 10-K" type="label" />
-            <SpreadsheetCell value={yearsSinceDisplay} type="calc" />
+            <SpreadsheetCell value="Years Since Last 10-K" type="label" tooltip="Quarters elapsed between the last annual filing (10-K) and the most recent quarterly filing (10-Q), expressed as a fraction. Drives how many quarters the LTM rotation pulls forward." />
+            <SpreadsheetCell value={yearsSinceDisplay} type="calc" tooltip="= (10-Q date − 10-K date) / 365.25 days. Near 0 = 10-K is fresh; near 1 = a full year has elapsed since the last annual filing and LTM rotation substitutes 4 quarters of new data." />
             {annualFins.map((_, i) => (
               <SpreadsheetCell key={`ys-${i}`} value="" type="label" />
             ))}
           </tr>
           <tr>
-            <SpreadsheetCell value="Period Date (10-K)" type="label" />
-            <SpreadsheetCell value={fmtDate(inp.period_date_10k)} type="financial" />
+            <SpreadsheetCell value="Period Date (10-K)" type="label" tooltip="Fiscal year-end date of the most recent annual report." />
+            <SpreadsheetCell value={fmtDate(inp.period_date_10k)} type="financial" tooltip={`=CIQ("${inp.ticker}","IQ_PERIODDATE","IQ_FY-0")`} />
             {annualFins.map((_, i) => (
               <SpreadsheetCell key={`pd10k-${i}`} value="" type="label" />
             ))}
           </tr>
           <tr>
-            <SpreadsheetCell value="Period Date (10-Q)" type="label" />
-            <SpreadsheetCell value={fmtDate(inp.period_date_10q)} type="financial" />
+            <SpreadsheetCell value="Period Date (10-Q)" type="label" tooltip="Period-end date of the most recent quarterly report — endpoint of the LTM window." />
+            <SpreadsheetCell value={fmtDate(inp.period_date_10q)} type="financial" tooltip={`=CIQ("${inp.ticker}","IQ_PERIODDATE","IQ_FQ-0")`} />
             {annualFins.map((_, i) => (
               <SpreadsheetCell key={`pd10q-${i}`} value="" type="label" />
             ))}
@@ -828,8 +829,9 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
             ];
             return rows.map(([label, company, regional, global_, fmt, srcRegional, srcGlobal]) => (
               <tr key={`cmp-${label}`}>
-                <SpreadsheetCell value={label} type="label" />
-                <SpreadsheetCell value={fmt === 'pct' ? pct(company) : dec(company)} type="calc" />
+                <SpreadsheetCell value={label} type="label" tooltip={`Row: ${label}. Left column = this firm (computed from CIQ data + LTM base year). Regional and Global columns = Damodaran industry medians.`} />
+                <SpreadsheetCell value={fmt === 'pct' ? pct(company) : dec(company)} type="calc"
+                  tooltip={`${label} — firm-level, computed from M3/M4 on the LTM-rotated base year. See the Ratios block above (Section 2) for the exact per-year formula.`} />
                 <SpreadsheetCell value={fmt === 'pct' ? pct(regional) : dec(regional)} type="reference"
                   tooltip={`Source: ${srcRegional} | Industry: ${ind.industry_name} (${ind.region})`} />
                 <SpreadsheetCell value={fmt === 'pct' ? pct(global_) : dec(global_)} type="reference"
