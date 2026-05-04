@@ -68,18 +68,23 @@ function YesNoSelect({ value, dotPath, onUpdate }: {
 // Editable number cell
 // ---------------------------------------------------------------------------
 
-function EditableNum({ value, dotPath, format, onUpdate }: {
+function EditableNum({ value, dotPath, format, onUpdate, tooltip }: {
   value: number | null | undefined;
   dotPath: string;
   format: 'num' | 'pct' | 'dec';
   onUpdate: (path: string, val: number | null) => void;
+  tooltip?: string;
 }) {
   const display = format === 'pct' ? pct(value) : format === 'num' ? num(value) : dec(value);
+  // Default tooltip shows the dot-path backing this input so the analyst
+  // can always identify which ValuationAssumptions field they're editing.
+  const effectiveTooltip = tooltip ?? `Editable input — backs ${dotPath}. PATCH commits update the session and re-run the DCF.`;
   return (
     <SpreadsheetCell
       value={display}
       type="hypothesis"
       editable
+      tooltip={effectiveTooltip}
       onChange={(raw) => {
         const cleaned = raw.replace(/[,%\s]/g, '');
         const n = parseFloat(cleaned);
@@ -749,13 +754,13 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
             <tr>
               <SpreadsheetCell value="Year of Convergence (1–10)" type="label" />
               <EditableNum value={va.margin_convergence_year} dotPath="valuation_assumptions.margin_convergence_year" format="num" onUpdate={update} />
-              <SpreadsheetCell value="—" type="calc" />
-              <SpreadsheetCell value="—" type="calc" />
-              <SpreadsheetCell value="—" type="calc" />
+              <SpreadsheetCell value="—" type="calc" tooltip="No historical equivalent — this is a projection-control input (integer K between 1 and 10)." />
+              <SpreadsheetCell value="—" type="calc" tooltip="No 3-year historical equivalent for this input." />
+              <SpreadsheetCell value="—" type="calc" tooltip="No 5-year historical equivalent for this input." />
               <SpreadsheetCell value="5 typical" type="calc" tooltip="Damodaran convention: converge margin linearly to target by year 5" />
-              <SpreadsheetCell value="—" type="reference" />
-              <SpreadsheetCell value="—" type="reference" />
-              <SpreadsheetCell value="—" type="reference" />
+              <SpreadsheetCell value="—" type="reference" tooltip="No industry (regional) benchmark — convergence year is a modelling choice, not a firm-level observable." />
+              <SpreadsheetCell value="—" type="reference" tooltip="No industry (global) benchmark." />
+              <SpreadsheetCell value="—" type="reference" tooltip="No Q1/Q3 benchmark range — same reason." />
             </tr>
 
             {/* Sales-to-Capital Yr 1-5 */}
