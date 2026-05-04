@@ -2,6 +2,7 @@ import type { ValuationResponse, RawFinancials } from '../types/valuation';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
+import CurrencyInfoPanel from '../components/CurrencyInfoPanel';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -198,6 +199,13 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
     <div className="max-w-[95vw] mx-auto p-4">
       <h1 className="text-xl font-bold mb-4">Input Sheet</h1>
       <ColorLegend />
+
+      {/* Currency Information — surfaces filing vs listing + editable FX rate.
+          Critical for cross-listed firms (Lenovo HKD→USD, BABA USD→CNY, etc.)
+          where CIQ's Reported Currency modifier is inert for market fields. */}
+      <CurrencyInfoPanel data={data} onPatch={(path, value) => {
+        if (onUpdate) onUpdate(path, value);
+      }} />
 
       {/* ----------------------------------------------------------------- */}
       {/* Section 1 — Company Information */}

@@ -70,6 +70,33 @@ def run_full_valuation(
         report.warnings.append("No financial data available")
         return report
 
+    # --- Manual-FX derivation of reporting-ccy market values ---
+    # Background: CIQ's "Reported Currency" modifier is inert for market data
+    # (stock price, market cap, option strike) — those always come through in
+    # LISTING currency regardless. Verified against 5 tickers on 2026-05-04.
+    # When the analyst overrides fx_rate manually (fx_rate_source = "manual"),
+    # re-derive the reporting-ccy variants from listing × fx so the valuation
+    # math (WACC uses mv_equity; P/V ratio uses stock_price_reporting) reflects
+    # the user's chosen rate rather than the stale CIQ-fetched values.
+    #
+    # Applied to every row in raw_financials (for the current year, these are
+    # the fields that matter; historical years' mv_equity/stock_price are
+    # typically None but we cover them for consistency).
+    if inputs.fx_rate is not None and inputs.fx_rate_source == "manual":
+        fx = inputs.fx_rate
+        for fin in financials:
+            if fin.stock_price is not None:
+                fin.stock_price_reporting = fin.stock_price * fx
+            if fin.mv_equity_listing is not None:
+                fin.mv_equity = fin.mv_equity_listing * fx
+            elif fin.mv_equity is not None and fin.stock_price is not None \
+                 and fin.stock_price_reporting is not None \
+                 and abs(fin.stock_price_reporting / fin.stock_price - fx) > 1e-6:
+                # mv_equity_listing was never populated; fall back to
+                # rescaling existing mv_equity by the fx-rate ratio.
+                old_fx = fin.stock_price_reporting / fin.stock_price
+                fin.mv_equity = fin.mv_equity * (fx / old_fx)
+
     raw_fy0 = financials[0]
     raw_prior = financials[1] if len(financials) > 1 else None
 
