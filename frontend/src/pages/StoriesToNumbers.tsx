@@ -146,7 +146,7 @@ export default function StoriesToNumbers({ data, onPatch, onPatchMany }: Props) 
     const ic = eq + debt - cash;
     if (ic === 0) return 'Invested Capital is zero — division undefined.';
     const sc = rev / ic;
-    return `${yearLabel(i)} Sales / Capital = Revenue / Invested Capital\nIC = BV Equity + BV Debt − Cash\n   = ${fmtM(eq)} + ${fmtM(debt)} − ${fmtM(cash)} = ${fmtM(ic)}\nS/C = ${fmtM(rev)} / ${fmtM(ic)} = ${sc.toFixed(3)}×\nSource: IQ_TOTAL_REV, IQ_TOTAL_EQUITY, IQ_TOTAL_DEBT, IQ_CASH_EQUIV × IQ_FY-${i}.`;
+    return `${yearLabel(i)} Sales / Capital = Revenue / Invested Capital\nIC = BV Equity + BV Debt − Cash\n   = ${fmtM(eq)} + ${fmtM(debt)} − ${fmtM(cash)} = ${fmtM(ic)}\nS/C = ${fmtM(rev)} / ${fmtM(ic)} = ${sc.toFixed(3)}×\nSource: IQ_TOTAL_REV, IQ_TOTAL_EQUITY, IQ_TOTAL_DEBT, IQ_CASH_ST_INVEST × IQ_FY-${i}.`;
   };
 
   const roicTooltip = (i: number): string => {
@@ -162,7 +162,7 @@ export default function StoriesToNumbers({ data, onPatch, onPatchMany }: Props) 
     const icPrev = prev.bv_equity + prev.bv_debt - prev.cash_and_marketable_securities;
     if (icPrev === 0) return 'Prior-year Invested Capital is zero — ROIC undefined.';
     const roic = nopat / icPrev;
-    return `${yearLabel(i)} ROIC = NOPAT / Prior-year IC\nNOPAT = EBIT × (1 − eff. tax)\n      = ${fmtM(ebit)} × (1 − ${(eff * 100).toFixed(2)}%)\n      = ${fmtM(nopat)}\nIC[${yearLabel(i + 1)}] = ${fmtM(prev.bv_equity)} + ${fmtM(prev.bv_debt)} − ${fmtM(prev.cash_and_marketable_securities)} = ${fmtM(icPrev)}\nROIC = ${fmtM(nopat)} / ${fmtM(icPrev)} = ${(roic * 100).toFixed(2)}%\nSources: IQ_EBIT, IQ_INC_TAX, IQ_EBT_EXCL × IQ_FY-${i}; IQ_TOTAL_EQUITY, IQ_TOTAL_DEBT, IQ_CASH_EQUIV × IQ_FY-${i + 1}.`;
+    return `${yearLabel(i)} ROIC = NOPAT / Prior-year IC\nNOPAT = EBIT × (1 − eff. tax)\n      = ${fmtM(ebit)} × (1 − ${(eff * 100).toFixed(2)}%)\n      = ${fmtM(nopat)}\nIC[${yearLabel(i + 1)}] = ${fmtM(prev.bv_equity)} + ${fmtM(prev.bv_debt)} − ${fmtM(prev.cash_and_marketable_securities)} = ${fmtM(icPrev)}\nROIC = ${fmtM(nopat)} / ${fmtM(icPrev)} = ${(roic * 100).toFixed(2)}%\nSources: IQ_EBIT, IQ_INC_TAX, IQ_EBT_EXCL × IQ_FY-${i}; IQ_TOTAL_EQUITY, IQ_TOTAL_DEBT, IQ_CASH_ST_INVEST × IQ_FY-${i + 1}.`;
   };
 
   const avgTooltip = (label: string, n: 3 | 5) => (_w: 3 | 5) =>
@@ -315,7 +315,7 @@ export default function StoriesToNumbers({ data, onPatch, onPatchMany }: Props) 
             <dd className="ml-3 font-mono text-[11px]">
               IC[t] = BV Equity[t] + BV Debt[t] − Cash[t]
               <br />
-              Source: IQ_TOTAL_EQUITY + IQ_TOTAL_DEBT − IQ_CASH_EQUIV × IQ_FY-t
+              Source: IQ_TOTAL_EQUITY + IQ_TOTAL_DEBT − IQ_CASH_ST_INVEST × IQ_FY-t
               <br />
               <span className="italic text-slate-500">
                 Note: for the DCF engine's IC, the R&D capitalization asset is added; this historical diagnostic

@@ -48,7 +48,13 @@ INCOME_STATEMENT_FIELDS = [
 # Balance Sheet / Point-in-time items
 # ──────────────────────────────────────────────────────────────
 BALANCE_SHEET_FIELDS = [
-    CIQField("cash_and_marketable_securities", "IQ_CASH_EQUIV",    is_balance_sheet=True, description="Cash & Equivalents"),
+    # Damodaran IC convention: "cash" in the Invested-Capital and equity-bridge
+    # formulas is TOTAL cash + short-term investments, not just cash equivalents.
+    # Short-term investments are also non-operating — leaving them inside the
+    # operating capital base would overstate Invested Capital and depress ROIC.
+    # User-confirmed correction (MediFest 2026-05-04): switched from
+    # IQ_CASH_EQUIV → IQ_CASH_ST_INVEST (Total Cash & Short-Term Investments).
+    CIQField("cash_and_marketable_securities", "IQ_CASH_ST_INVEST", is_balance_sheet=True, description="Total Cash & Short-Term Investments"),
     CIQField("bv_equity",            "IQ_TOTAL_EQUITY",      is_balance_sheet=True, description="Total Stockholders' Equity"),
     CIQField("bv_debt",              "IQ_TOTAL_DEBT",        is_balance_sheet=True, description="Total Debt"),
     CIQField("shares_outstanding",   "IQ_TOTAL_OUTSTANDING_FILING_DATE",  is_balance_sheet=True, description="Total Shares Outstanding (Filing Date)"),

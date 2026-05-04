@@ -58,7 +58,7 @@ const CIQ_MNEMONICS: Record<string, string> = {
   net_income: 'IQ_NI', interest_expense: 'IQ_INTEREST_EXP', d_a: 'IQ_DA_CF',
   capex: 'IQ_CAPEX', r_and_d_expense: 'IQ_RD_EXP',
   earnings_before_tax: 'IQ_EBT_EXCL', total_tax_expense: 'IQ_INC_TAX',
-  cash_and_marketable_securities: 'IQ_CASH_EQUIV', bv_equity: 'IQ_TOTAL_EQUITY',
+  cash_and_marketable_securities: 'IQ_CASH_ST_INVEST', bv_equity: 'IQ_TOTAL_EQUITY',
   bv_debt: 'IQ_TOTAL_DEBT', cross_holdings: 'IQ_LT_INVEST',
   minority_interests: 'IQ_MINORITY_INTEREST',
   shares_outstanding: 'IQ_TOTAL_OUTSTANDING_FILING_DATE',

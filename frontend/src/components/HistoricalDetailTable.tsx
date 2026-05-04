@@ -64,7 +64,7 @@ export default function HistoricalDetailTable({ data }: Props) {
     const cash = history[i]?.cash_and_marketable_securities;
     if (rev == null || eq == null || debt == null || cash == null) return `FY-${i}: insufficient data.`;
     const ic = eq + debt - cash;
-    return `FY-${i} S/C = Revenue / IC (current-year)\nIC = BV Equity + BV Debt − Cash = ${fmtM(eq)} + ${fmtM(debt)} − ${fmtM(cash)} = ${fmtM(ic)}\nS/C = ${fmtM(rev)} / ${fmtM(ic)} = ${(rev / ic).toFixed(3)}×\nSources: IQ_TOTAL_REV, IQ_TOTAL_EQUITY, IQ_TOTAL_DEBT, IQ_CASH_EQUIV × IQ_FY-${i}.`;
+    return `FY-${i} S/C = Revenue / IC (current-year)\nIC = BV Equity + BV Debt − Cash = ${fmtM(eq)} + ${fmtM(debt)} − ${fmtM(cash)} = ${fmtM(ic)}\nS/C = ${fmtM(rev)} / ${fmtM(ic)} = ${(rev / ic).toFixed(3)}×\nSources: IQ_TOTAL_REV, IQ_TOTAL_EQUITY, IQ_TOTAL_DEBT, IQ_CASH_ST_INVEST × IQ_FY-${i}.`;
   };
   const roicTip = (i: number) => {
     const f = history[i];

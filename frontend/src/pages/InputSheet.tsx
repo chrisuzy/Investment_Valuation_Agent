@@ -109,7 +109,7 @@ const CIQ_MNEMONICS: Record<string, string> = {
   r_and_d_expense: 'IQ_RD_EXP',
   earnings_before_tax: 'IQ_EBT_EXCL',
   total_tax_expense: 'IQ_INC_TAX',
-  cash_and_marketable_securities: 'IQ_CASH_EQUIV',
+  cash_and_marketable_securities: 'IQ_CASH_ST_INVEST',
   bv_equity: 'IQ_TOTAL_EQUITY',
   bv_debt: 'IQ_TOTAL_DEBT',
   cross_holdings: 'IQ_LT_INVEST',
@@ -388,7 +388,7 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
                     : row.label.includes('Revenue Growth')
                     ? 'Year-over-year revenue growth = (Revenue[t] − Revenue[t−1]) / Revenue[t−1]. Source: IQ_TOTAL_REV across fiscal years.'
                     : row.label.includes('Invested Capital')
-                    ? 'Invested Capital = BV Equity + BV Debt − Cash. Source: IQ_TOTAL_EQUITY + IQ_TOTAL_DEBT − IQ_CASH_EQUIV (current year). Does NOT include R&D capitalization here — that adjustment lives in the DCF engine\'s IC for M3 ROIC.'
+                    ? 'Invested Capital = BV Equity + BV Debt − Cash. Source: IQ_TOTAL_EQUITY + IQ_TOTAL_DEBT − IQ_CASH_ST_INVEST (current year). Does NOT include R&D capitalization here — that adjustment lives in the DCF engine\'s IC for M3 ROIC.'
                     : row.label.includes('ROIC')
                     ? 'ROIC = NOPAT / Prior-year Invested Capital. NOPAT = EBIT × (1 − effective tax). IC(prev) = BV Eq(prev) + BV Debt(prev) − Cash(prev). Effective tax = Tax Expense / EBT for the same year.'
                     : row.label.includes('Sales / Capital')

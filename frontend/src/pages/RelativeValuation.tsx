@@ -147,7 +147,7 @@ export default function RelativeValuation({ data }: { data: ValuationResponse; s
           </tr>
           <tr>
             <SpreadsheetCell value="Cash & Marketable Securities" type="label" />
-            <SpreadsheetCell value={dec(cash, 0)} type="financial" tooltip="Base-year cash. Source: IQ_CASH_EQUIV × IQ_FY-0 (or LTM-rotated). Subtracted in the EV calc." />
+            <SpreadsheetCell value={dec(cash, 0)} type="financial" tooltip="Base-year cash. Source: IQ_CASH_ST_INVEST × IQ_FY-0 (or LTM-rotated). Subtracted in the EV calc." />
           </tr>
           <tr>
             <SpreadsheetCell value="Enterprise Value = MV_E + MV_D − Cash" type="label" bold />

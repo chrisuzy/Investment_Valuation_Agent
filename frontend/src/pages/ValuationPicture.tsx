@@ -99,7 +99,7 @@ export default function ValuationPicture({ data, sessionId }: { data: ValuationR
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="+ Cash" />
-            <SpreadsheetCell type="financial" value={fin?.cash_and_marketable_securities ?? null} tooltip="Base-year cash & marketable securities. Source: IQ_CASH_EQUIV × IQ_FY-0 (or LTM if rotated)." />
+            <SpreadsheetCell type="financial" value={fin?.cash_and_marketable_securities ?? null} tooltip="Base-year cash & marketable securities. Source: IQ_CASH_ST_INVEST × IQ_FY-0 (or LTM if rotated)." />
           </tr>
           <tr>
             <SpreadsheetCell type="label" value="+ Cross-holdings" />
