@@ -66,19 +66,19 @@ export default function Diagnostics({ data, sessionId }: { data: ValuationRespon
         <tbody>
           <tr>
             <SpreadsheetCell value="Industry avg revenue growth" type="label" width="280px" />
-            <SpreadsheetCell value="N/A" type="reference" />
+            <SpreadsheetCell value="N/A" type="reference" tooltip="Reserved for industry-growth benchmark. See Input Sheet §7 or Stories to Numbers Growth block for the industry median + Q1/Q3 range." />
           </tr>
           <tr>
             <SpreadsheetCell value="Most recent revenue growth" type="label" />
-            <SpreadsheetCell value={recentRevenueGrowth} type="calc" />
+            <SpreadsheetCell value={recentRevenueGrowth} type="calc" tooltip="= (FY-0 Revenue − FY-1 Revenue) / FY-1 Revenue. Source: IQ_TOTAL_REV × IQ_FY-0 and IQ_FY-1." />
           </tr>
           <tr>
             <SpreadsheetCell value="Your forecast — Year 1 growth" type="label" />
-            <SpreadsheetCell value={assumptions.revenue_growth_next_year} type="hypothesis" />
+            <SpreadsheetCell value={assumptions.revenue_growth_next_year} type="hypothesis" tooltip="Analyst input: valuation_assumptions.revenue_growth_next_year." />
           </tr>
           <tr>
             <SpreadsheetCell value="Your forecast — Years 2-5 growth" type="label" />
-            <SpreadsheetCell value={assumptions.revenue_growth_years_2_5} type="hypothesis" />
+            <SpreadsheetCell value={assumptions.revenue_growth_years_2_5} type="hypothesis" tooltip="Analyst input: valuation_assumptions.revenue_growth_years_2_5. Single flat rate applied across years 2–5." />
           </tr>
           <tr>
             <SpreadsheetCell
@@ -95,21 +95,21 @@ export default function Diagnostics({ data, sessionId }: { data: ValuationRespon
         <tbody>
           <tr>
             <SpreadsheetCell value="Base year revenues" type="label" width="280px" />
-            <SpreadsheetCell value={baseRevenue} type="financial" />
+            <SpreadsheetCell value={baseRevenue} type="financial" tooltip="LTM revenue. Source: rotated from IQ_TOTAL_REV × IQ_FY-0 with quarterly deltas (Module 0 / LTM calculator)." />
           </tr>
           {dcf && (
             <>
               <tr>
                 <SpreadsheetCell value="Year 1 revenues" type="label" />
-                <SpreadsheetCell value={revYear1} type="calc" />
+                <SpreadsheetCell value={revYear1} type="calc" tooltip="Projected year-1 revenue from the DCF engine: dcf.revenue_projections[0]. = Base × (1 + revenue_growth_next_year)." />
               </tr>
               <tr>
                 <SpreadsheetCell value="Year 5 revenues" type="label" />
-                <SpreadsheetCell value={revYear5} type="calc" />
+                <SpreadsheetCell value={revYear5} type="calc" tooltip="Projected year-5 revenue: dcf.revenue_projections[4]. Compounds year-1 growth with years 2–5 growth." />
               </tr>
               <tr>
                 <SpreadsheetCell value="Year 10 revenues" type="label" />
-                <SpreadsheetCell value={revYear10} type="calc" />
+                <SpreadsheetCell value={revYear10} type="calc" tooltip="Projected year-10 revenue: dcf.revenue_projections[9]. Years 6–10 converge linearly from years 2–5 growth to terminal growth (risk-free by default)." />
               </tr>
             </>
           )}
@@ -128,19 +128,19 @@ export default function Diagnostics({ data, sessionId }: { data: ValuationRespon
         <tbody>
           <tr>
             <SpreadsheetCell value="Current operating margin" type="label" width="280px" />
-            <SpreadsheetCell value={currentMargin} type="calc" />
+            <SpreadsheetCell value={currentMargin} type="calc" tooltip="= Adjusted EBIT / LTM Revenue. Adjusted EBIT includes R&D add-back + lease add-back from Module 1." />
           </tr>
           <tr>
             <SpreadsheetCell value="Target operating margin" type="label" />
-            <SpreadsheetCell value={assumptions.target_operating_margin} type="hypothesis" />
+            <SpreadsheetCell value={assumptions.target_operating_margin} type="hypothesis" tooltip="Analyst input: valuation_assumptions.target_operating_margin. The mature-state margin the firm converges to." />
           </tr>
           <tr>
             <SpreadsheetCell value="Industry pretax margin" type="label" />
-            <SpreadsheetCell value={industry.pretax_operating_margin} type="reference" />
+            <SpreadsheetCell value={industry.pretax_operating_margin} type="reference" tooltip={`Damodaran industry median pre-tax operating margin. Industry: ${industry.industry_name} (${industry.region}). Source: margin${industry.region === 'Global' ? 'Global' : ''}.xls.`} />
           </tr>
           <tr>
             <SpreadsheetCell value="Year of convergence" type="label" />
-            <SpreadsheetCell value={assumptions.margin_convergence_year} type="hypothesis" />
+            <SpreadsheetCell value={assumptions.margin_convergence_year} type="hypothesis" tooltip="Analyst input: valuation_assumptions.margin_convergence_year (K). Years 2..K interpolate linearly from current margin to target; years K+1..10 flat at target." />
           </tr>
           <tr>
             <SpreadsheetCell
@@ -157,15 +157,15 @@ export default function Diagnostics({ data, sessionId }: { data: ValuationRespon
         <tbody>
           <tr>
             <SpreadsheetCell value="Sales/capital years 1-5" type="label" width="280px" />
-            <SpreadsheetCell value={assumptions.sales_to_capital_high} type="calc" />
+            <SpreadsheetCell value={assumptions.sales_to_capital_high} type="calc" tooltip="Analyst input: valuation_assumptions.sales_to_capital_high. Used in reinvestment = ΔRevenue / S/C for years 1–5." />
           </tr>
           <tr>
             <SpreadsheetCell value="Sales/capital years 6-10" type="label" />
-            <SpreadsheetCell value={assumptions.sales_to_capital_stable} type="calc" />
+            <SpreadsheetCell value={assumptions.sales_to_capital_stable} type="calc" tooltip="Analyst input: valuation_assumptions.sales_to_capital_stable. Used for years 6–10 during convergence to the stable state." />
           </tr>
           <tr>
             <SpreadsheetCell value="Industry sales/capital" type="label" />
-            <SpreadsheetCell value={industry.sales_to_capital} type="reference" />
+            <SpreadsheetCell value={industry.sales_to_capital} type="reference" tooltip={`Damodaran industry median Sales/Capital. Industry: ${industry.industry_name}. Source: capex${industry.region === 'Global' ? 'Global' : ''}.xls.`} />
           </tr>
           <tr>
             <SpreadsheetCell
@@ -182,15 +182,15 @@ export default function Diagnostics({ data, sessionId }: { data: ValuationRespon
         <tbody>
           <tr>
             <SpreadsheetCell value="Cost of capital (WACC)" type="label" width="280px" />
-            <SpreadsheetCell value={data.cost_of_capital?.wacc ?? null} type="calc" />
+            <SpreadsheetCell value={data.cost_of_capital?.wacc ?? null} type="calc" tooltip="Source: cost_of_capital.wacc from Module 2. WACC = Ke × E/V + Kd(1−t) × D/V." />
           </tr>
           <tr>
             <SpreadsheetCell value="Industry WACC" type="label" />
-            <SpreadsheetCell value={industry.wacc} type="reference" />
+            <SpreadsheetCell value={industry.wacc} type="reference" tooltip={`Damodaran industry median WACC for ${industry.industry_name}. Source: wacc${industry.region === 'Global' ? 'Global' : ''}.xls.`} />
           </tr>
           <tr>
             <SpreadsheetCell value="Risk-free rate" type="label" />
-            <SpreadsheetCell value={macro.risk_free_rate} type="hypothesis" />
+            <SpreadsheetCell value={macro.risk_free_rate} type="hypothesis" tooltip="Analyst input (set on upload): macro_inputs.risk_free_rate. 10Y treasury rate." />
           </tr>
           <tr>
             <SpreadsheetCell
@@ -207,7 +207,7 @@ export default function Diagnostics({ data, sessionId }: { data: ValuationRespon
         <tbody>
           <tr>
             <SpreadsheetCell value="Value per share" type="label" width="280px" />
-            <SpreadsheetCell value={valuePerShare} type="calc" />
+            <SpreadsheetCell value={valuePerShare} type="calc" tooltip="Intrinsic value per share in reporting currency. Source: final.value_per_share. = (Value of Equity − Options) / Shares." />
           </tr>
           <tr>
             <SpreadsheetCell value={`Stock price (${listingCcy ?? '—'}, listing ccy)`} type="label" />

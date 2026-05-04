@@ -303,7 +303,7 @@ export default function SummarySheet({ data }: { data: ValuationResponse; sessio
           </tr>
           <tr>
             <SpreadsheetCell value="Value per Share (pre-options)" type="label" bold />
-            <SpreadsheetCell value={num(dcf.value_per_share_pre_options)} type="calc" bold />
+            <SpreadsheetCell value={num(dcf.value_per_share_pre_options)} type="calc" bold tooltip="Value per share before deducting employee-option dilution. = Value of Equity / Shares Outstanding. Source: dcf.value_per_share_pre_options. The final Value per Share below is this figure minus option dilution (Module 6)." />
           </tr>
           <tr>
             <SpreadsheetCell value={`Value per Share (final, ${data.inputs.reporting_currency || '?'})`} type="label" bold />

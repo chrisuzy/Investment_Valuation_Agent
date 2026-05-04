@@ -288,7 +288,7 @@ export default function TrailingTwelveMonth({ data }: { data: ValuationResponse;
                 <SpreadsheetCell value={label} type="label" />
                 <SpreadsheetCell value={num(qVal(0, key))} type="financial" tooltip={`=CIQ("${ticker}","${mnem}","IQ_FQ-0")`} />
                 <SpreadsheetCell value={num(fin0?.[key] as number | null)} type="financial" tooltip={`=CIQ("${ticker}","${mnem}","IQ_FY-0")`} />
-                <SpreadsheetCell value={num(bs.value)} type="calc" />
+                <SpreadsheetCell value={num(bs.value)} type="calc" tooltip={`LTM balance-sheet value = most recent 10-Q snapshot (IQ_FQ-0) when available, else falls back to 10-K (IQ_FY-0). Balance-sheet items are point-in-time, not rotated.`} />
                 <td className={`border px-1.5 py-0.5 text-xs font-medium ${bs.source === '10-Q' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>
                   {bs.source === '10-Q' ? '10-Q (most recent)' : '10-K (no quarterly data)'}
                 </td>

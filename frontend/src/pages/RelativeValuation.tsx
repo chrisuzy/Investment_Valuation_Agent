@@ -147,19 +147,19 @@ export default function RelativeValuation({ data }: { data: ValuationResponse; s
           </tr>
           <tr>
             <SpreadsheetCell value="Cash & Marketable Securities" type="label" />
-            <SpreadsheetCell value={dec(cash, 0)} type="financial" />
+            <SpreadsheetCell value={dec(cash, 0)} type="financial" tooltip="Base-year cash. Source: IQ_CASH_EQUIV × IQ_FY-0 (or LTM-rotated). Subtracted in the EV calc." />
           </tr>
           <tr>
             <SpreadsheetCell value="Enterprise Value = MV_E + MV_D − Cash" type="label" bold />
-            <SpreadsheetCell value={dec(ev, 0)} type="calc" bold />
+            <SpreadsheetCell value={dec(ev, 0)} type="calc" bold tooltip="EV = Market Cap + Adjusted MV Debt − Cash. Denominator for EV-based multiples (EV/EBITDA, EV/Sales)." />
           </tr>
           <tr>
             <SpreadsheetCell value="Revenue" type="label" />
-            <SpreadsheetCell value={dec(rev, 0)} type="financial" />
+            <SpreadsheetCell value={dec(rev, 0)} type="financial" tooltip="LTM revenue. Source: IQ_TOTAL_REV rotated to LTM. Denominator of EV/Sales." />
           </tr>
           <tr>
             <SpreadsheetCell value="EBITDA" type="label" />
-            <SpreadsheetCell value={dec(ebitda, 0)} type="financial" />
+            <SpreadsheetCell value={dec(ebitda, 0)} type="financial" tooltip="LTM EBITDA. Source: IQ_EBITDA rotated to LTM. Denominator of EV/EBITDA." />
           </tr>
           <tr>
             <SpreadsheetCell value="Adjusted Net Income" type="label" />
