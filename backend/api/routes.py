@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from engine.data_dictionary import (
     CompanyValuationInput, MacroInputs, ValuationAssumptions,
-    RawFinancials, AdjustmentInputs, OptionInputs,
+    RawFinancials, AdjustmentInputs, OptionInputs, TaxHistory,
 )
 from engine.orchestrator import run_full_valuation
 from engine.source_tracker import SourceTracker
@@ -604,10 +604,46 @@ async def fetch_from_file(
     if ebt and tax_exp and ebt > 0:
         macro.tax_rate_effective = abs(tax_exp) / abs(ebt)
 
+    # Build historical tax rate series (last 5 fiscal years, most-recent-first)
+    # for the Tax Override Panel on Stories to Numbers (Issue 1 remediation).
+    tax_history_yearly: list[float | None] = []
+    for i in range(5):
+        yr_ciq = ciq_data["annual"].get(i, {})
+        ebt_i = _fval_or_none(yr_ciq, "earnings_before_tax")
+        tax_exp_i = _fval_or_none(yr_ciq, "total_tax_expense")
+        if ebt_i and tax_exp_i and ebt_i != 0:
+            tax_history_yearly.append(abs(tax_exp_i) / abs(ebt_i))
+        else:
+            tax_history_yearly.append(None)
+    _non_none_tax = [t for t in tax_history_yearly if t is not None]
+    tax_history_avg_3yr = (
+        sum(t for t in tax_history_yearly[:3] if t is not None)
+        / max(1, len([t for t in tax_history_yearly[:3] if t is not None]))
+        if any(t is not None for t in tax_history_yearly[:3])
+        else None
+    )
+    tax_history_avg_5yr = (
+        sum(_non_none_tax) / len(_non_none_tax) if _non_none_tax else None
+    )
+
     # Build RawFinancials from the parsed CIQ data
     annual = ciq_data["annual"]
     # `current` already hoisted above; this keeps the code readable at the usage site
     period_dates = ciq_data.get("period_dates", {})
+
+    # Hoist reporting_currency before the FX-rate check below. The CIQ
+    # "current" block carries the ticker's reporting currency directly, so
+    # we can derive it eagerly here; the raw_financials loop further down
+    # still reassigns it per row (same value — the latter is redundant but
+    # left intact to avoid scope creep).
+    #
+    # Pre-existing latent bug without this hoist: UnboundLocalError when the
+    # FX-rate check at line ~663 executed before any historical row had been
+    # processed. Surfaced by the Lenovo fixture.
+    reporting_currency = None
+    _rc = current.get("reporting_currency")
+    if isinstance(_rc, str) and _rc.strip():
+        reporting_currency = _rc.strip()
 
     # Derive base fiscal year from period_date_annual (FY-0)
     # e.g., "Mar 31, 2025" → 2025; "Jan 26, 2026" → 2026
@@ -875,6 +911,11 @@ async def fetch_from_file(
         option_inputs=option_inputs,
         valuation_assumptions=ValuationAssumptions(),
         methodology_choices=methodology,
+        tax_history=TaxHistory(
+            yearly=tax_history_yearly,
+            avg_3yr=tax_history_avg_3yr,
+            avg_5yr=tax_history_avg_5yr,
+        ),
     )
 
     if inputs.raw_financials:
