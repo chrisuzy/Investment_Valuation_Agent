@@ -54,6 +54,21 @@ docs/private/
 knowledge_base/ciq_fetches/
 TEST_DATA/
 
+# Third-party screener exports — NEVER commit, regardless of folder.
+# Users run their own screener and drop files into the designated
+# folder per the DB integration plan; the raw files stay local.
+US_CN_HK_dataset/
+markets_dataset/
+ginzu_cc_*.xls
+ginzu_cc_*.xlsx
+
+# Ingested company database file (derived from screener files via
+# the admin refresh endpoint). Built locally; do not commit artifact.
+backend/data_sources/*.sqlite
+backend/data_sources/*.sqlite-journal
+backend/data_sources/*.sqlite-wal
+backend/data_sources/*.sqlite-shm
+
 # Aswath Damodaran's reference workbooks and datasets (downloadable
 # from pages.stern.nyu.edu/~adamodar/ — users download fresh)
 knowledge_base/Ginzu_NVIDIA.xlsx
