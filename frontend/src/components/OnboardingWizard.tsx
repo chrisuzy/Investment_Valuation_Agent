@@ -1,5 +1,8 @@
-import { useState, useRef } from 'react';
-import { searchCompanies, downloadTemplate, fetchFromFile } from '../api/client';
+import { useState, useRef, useEffect } from 'react';
+import {
+  searchCompanies, downloadTemplate, fetchFromFile,
+  companyExists, valueFromDatabase,
+} from '../api/client';
 import type { SearchResult } from '../api/client';
 import type { ValuationResponse } from '../types/valuation';
 
@@ -31,6 +34,34 @@ export default function OnboardingWizard({ onComplete, onDemo }: Props) {
 
   const [templateDownloaded, setTemplateDownloaded] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+
+  // DB-backed path: when the selected company is in the ingested markets DB,
+  // offer an instant valuation without the template round-trip.
+  const [dbStatus, setDbStatus] = useState<{ inDb: boolean; dataAsOf: string | null } | null>(null);
+  const [loadingFromDb, setLoadingFromDb] = useState(false);
+
+  useEffect(() => {
+    if (!selectedCompany) { setDbStatus(null); return; }
+    let cancelled = false;
+    companyExists(selectedCompany.exchange_ticker)
+      .then((r) => { if (!cancelled) setDbStatus({ inDb: r.in_database, dataAsOf: r.data_as_of }); })
+      .catch(() => { if (!cancelled) setDbStatus({ inDb: false, dataAsOf: null }); });
+    return () => { cancelled = true; };
+  }, [selectedCompany]);
+
+  async function triggerValueFromDb() {
+    if (!selectedCompany) return;
+    setLoadingFromDb(true);
+    setError(null);
+    try {
+      const resp = await valueFromDatabase(selectedCompany.exchange_ticker);
+      onComplete(resp);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Database valuation failed');
+    } finally {
+      setLoadingFromDb(false);
+    }
+  }
 
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -205,6 +236,9 @@ export default function OnboardingWizard({ onComplete, onDemo }: Props) {
             onDownload={triggerDownload}
             onProceed={proceedToStep3}
             onBack={() => goBack(1)}
+            dbStatus={dbStatus}
+            loadingFromDb={loadingFromDb}
+            onValueFromDb={triggerValueFromDb}
           />
         )}
         {step === 3 && selectedCompany && (
@@ -360,6 +394,7 @@ function StepOne({
 function StepTwo({
   company, downloadingTemplate, templateDownloaded,
   onDownload, onProceed, onBack,
+  dbStatus, loadingFromDb, onValueFromDb,
 }: {
   company: SearchResult;
   downloadingTemplate: boolean;
@@ -367,6 +402,9 @@ function StepTwo({
   onDownload: () => void;
   onProceed: () => void;
   onBack: () => void;
+  dbStatus: { inDb: boolean; dataAsOf: string | null } | null;
+  loadingFromDb: boolean;
+  onValueFromDb: () => void;
 }) {
   return (
     <div className="p-6 space-y-4">
@@ -392,6 +430,41 @@ function StepTwo({
           {company.industry}
         </div>
       </div>
+
+      {/* Database-backed fast path — shown when ticker is in the ingested DB. */}
+      {dbStatus?.inDb && (
+        <div className="bg-emerald-50 border border-emerald-300 rounded-lg p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs text-emerald-800 uppercase font-semibold mb-1">
+                ⚡ Instant — from database
+              </div>
+              <div className="text-sm text-emerald-900">
+                This company is in the ingested markets dataset. You can skip the template
+                download and upload entirely.
+              </div>
+              {dbStatus.dataAsOf && (
+                <div className="text-[11px] text-emerald-700 mt-1">
+                  Data as of {dbStatus.dataAsOf}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={onValueFromDb}
+              disabled={loadingFromDb}
+              className="shrink-0 px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:bg-gray-300"
+            >
+              {loadingFromDb ? 'Running valuation…' : '→ Value from Database'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {dbStatus && !dbStatus.inDb && (
+        <div className="text-[11px] text-slate-500 italic">
+          Not found in the pre-ingested markets dataset — use the template path below.
+        </div>
+      )}
 
       {/* Download action */}
       <div className="flex flex-col items-center gap-3 py-4">
