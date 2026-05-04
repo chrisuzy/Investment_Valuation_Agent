@@ -228,12 +228,16 @@ def compute_dcf(
         g_terminal = min(g_terminal, macro.risk_free_rate)
 
     # --- Revenue growth inputs ---
-    g_year_1 = assumptions.revenue_growth_next_year
-    if g_year_1 is None:
-        g_year_1 = cf_metrics.expected_growth_ebit or g_terminal
+    # Folder philosophy (module_05 §2-§3.1): growth is the analyst's
+    # judgment, never a silent default from historical ROIC × RIR.
+    # expected_growth_ebit remains as a diagnostic reference on Stories
+    # to Numbers but is NEVER substituted into the projection.
+    # Blank input stays blank — manifests as 0% growth, obviously broken
+    # projection that forces the analyst to enter their story.
+    g_year_1 = assumptions.revenue_growth_next_year if assumptions.revenue_growth_next_year is not None else 0.0
     g_years_2_5 = assumptions.revenue_growth_years_2_5
     if g_years_2_5 is None:
-        # Ginzu default: B27 = B25 (years 2-5 grow at year-1 rate)
+        # Folder default (§3.1): years 2-5 grow at year-1 rate if blank.
         g_years_2_5 = g_year_1
 
     # --- Margin inputs ---
@@ -247,6 +251,11 @@ def compute_dcf(
     # --- Tax inputs ---
     t_marginal = macro.tax_rate_marginal
     t_effective = macro.tax_rate_effective if macro.tax_rate_effective is not None else t_marginal
+    # Analyst override for years 1..high_growth_years (Issue 1 from Lenovo
+    # audit). When set, replaces the held-flat effective rate for the
+    # high-growth window; years 6-10 still converge to t_marginal.
+    if assumptions.effective_tax_rate_override_years_1_5 is not None:
+        t_effective = assumptions.effective_tax_rate_override_years_1_5
 
     # --- Sales-to-Capital inputs ---
     sc_high = assumptions.sales_to_capital_high
@@ -400,6 +409,13 @@ def compute_dcf(
     shares = raw.shares_outstanding or 1.0
     value_per_share = value_of_equity / shares
 
+    # --- Implied ROIC terminal (closed-loop output of the three stories) ---
+    # roic_path already computed per-year from NOPAT_t / IC_{t-1}. Terminal
+    # uses the last IC entry (end of year 10) as the denominator for the
+    # terminal year's NOPAT.
+    ic_last = ic_path[-1] if ic_path else 0.0
+    implied_roic_terminal = nopat_terminal / ic_last if ic_last > 0 else None
+
     return DCFResult(
         revenue_projections=revenue_projections,
         ebit_projections=ebit_projections,
@@ -413,4 +429,6 @@ def compute_dcf(
         value_of_operating_assets=value_of_operating_assets,
         value_of_equity=value_of_equity,
         value_per_share_pre_options=value_per_share,
+        implied_roic_projections=roic_path,
+        implied_roic_terminal=implied_roic_terminal,
     )
