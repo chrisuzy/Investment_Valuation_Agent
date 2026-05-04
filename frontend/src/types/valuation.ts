@@ -231,6 +231,25 @@ export interface CashFlowMetrics {
   rir_equity: number | null;
   expected_growth_ebit: number | null;
   expected_growth_ni: number | null;
+  // Historical-series diagnostics for three-story joint examination.
+  // Most-recent-first (index 0 = FY-0). Up to 5 entries. None where
+  // components were unavailable.
+  historical_roic_by_year: (number | null)[];
+  historical_s_c_by_year: (number | null)[];
+  historical_margin_by_year: (number | null)[];
+  historical_revenue_growth_by_year: (number | null)[];
+  historical_roic_avg_3yr: number | null;
+  historical_roic_avg_5yr: number | null;
+  historical_s_c_avg_3yr: number | null;
+  historical_s_c_avg_5yr: number | null;
+  historical_margin_avg_3yr: number | null;
+  historical_margin_avg_5yr: number | null;
+}
+
+export interface TaxHistory {
+  yearly: (number | null)[];
+  avg_3yr: number | null;
+  avg_5yr: number | null;
 }
 
 export interface ValuationAssumptions {
@@ -261,6 +280,10 @@ export interface ValuationAssumptions {
   override_trapped_cash: boolean;
   trapped_cash_amount: number;
   trapped_cash_tax_rate: number;
+  // Manual override for years 1..high_growth_years effective tax rate.
+  // When set, the DCF uses this for the high-growth window instead of the
+  // historical effective rate. Years 6-10 still converge to marginal.
+  effective_tax_rate_override_years_1_5: number | null;
 }
 
 export interface DCFResult {
@@ -276,6 +299,9 @@ export interface DCFResult {
   value_of_operating_assets: number | null;
   value_of_equity: number | null;
   value_per_share_pre_options: number | null;
+  // Implied ROIC path forced by the three stories (per-year + terminal).
+  implied_roic_projections: number[];
+  implied_roic_terminal: number | null;
 }
 
 export interface MultiplesResult {
@@ -335,6 +361,9 @@ export interface CompanyValuationInput {
   option_inputs: OptionInputs;
   valuation_assumptions: ValuationAssumptions;
   methodology_choices: MethodologyChoices;
+  // Historical effective tax rate reference block (last 5 FY + 3/5yr
+  // averages). Consumed by the Tax Override Panel on Stories to Numbers.
+  tax_history: TaxHistory | null;
 }
 
 export interface IndustryStatQuartile {
