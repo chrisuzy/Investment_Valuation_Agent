@@ -118,9 +118,13 @@ def run_full_valuation(
     )
 
     # --- Module 3: Cash Flow & Growth ---
+    # Pass the full raw_financials list (most-recent-first) so M3 can
+    # compute historical ROIC / S/C / margin / growth series for the
+    # three-story examination panel on Stories to Numbers.
     report.cashflow = compute_cashflow_and_growth(
         report.adjusted, raw_current, inputs.adjustment_inputs,
         report.cost_of_capital, raw_prior, macro=inputs.macro_inputs,
+        raw_financials_history=financials,
     )
 
     # --- Module 4: DCF ---

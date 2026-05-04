@@ -17,6 +17,89 @@ from .data_dictionary import (
 )
 
 
+def _safe_mean(values: list[float | None]) -> float | None:
+    filtered = [v for v in values if v is not None]
+    if not filtered:
+        return None
+    return sum(filtered) / len(filtered)
+
+
+def _compute_historical_series(
+    history: list[RawFinancials],
+    tax_rate: float,
+    r_and_d_asset_current: float,
+) -> dict:
+    """Compute 5-year historical diagnostic series for three-story examination.
+
+    Convention:
+      NOPAT_i        = raw_EBIT_i × (1 - tax_rate_effective)
+      IC_i           = bv_equity_i + R&D_asset_proxy + bv_debt_i - cash_i
+      ROIC_i         = NOPAT_i / IC_{i+1}   (prior-year IC denominator, standard)
+      S_C_i          = Revenue_i / IC_i      (current-year IC, matches Damodaran)
+      Margin_i       = EBIT_i / Revenue_i    (pre-tax)
+      RevGrowth_i    = Revenue_i / Revenue_{i+1} - 1
+
+    Uses current-year R&D asset as a proxy for historical IC (simplification:
+    the folder's per-year R&D capitalization would require re-running M1 five
+    times; since this is diagnostic display only, we use the current value).
+    Any component missing → that year's entry is None.
+    """
+    n = min(len(history), 5)
+    roic = [None] * n
+    s_c = [None] * n
+    margin = [None] * n
+    rev_growth = [None] * n
+
+    # Per-year IC (current-year balance sheet)
+    ic_current: list[float | None] = []
+    for i in range(n):
+        f = history[i]
+        bv_eq = f.bv_equity
+        bv_debt = f.bv_debt
+        cash = f.cash_and_marketable_securities
+        if bv_eq is not None and bv_debt is not None and cash is not None:
+            ic_current.append(bv_eq + r_and_d_asset_current + bv_debt - cash)
+        else:
+            ic_current.append(None)
+
+    for i in range(n):
+        f = history[i]
+        ebit_i = f.ebit
+        rev_i = f.revenues
+
+        # Margin
+        if ebit_i is not None and rev_i not in (None, 0):
+            margin[i] = ebit_i / rev_i
+
+        # S/C — current-year IC
+        if rev_i is not None and ic_current[i] not in (None, 0):
+            s_c[i] = rev_i / ic_current[i]
+
+        # ROIC — prior-year IC (i+1 in a most-recent-first list)
+        if i + 1 < n and ebit_i is not None and ic_current[i + 1] not in (None, 0):
+            nopat_i = ebit_i * (1 - tax_rate)
+            roic[i] = nopat_i / ic_current[i + 1]
+
+        # Revenue growth — from prior year
+        if i + 1 < n:
+            rev_prev = history[i + 1].revenues
+            if rev_i is not None and rev_prev not in (None, 0):
+                rev_growth[i] = rev_i / rev_prev - 1
+
+    return {
+        "historical_roic_by_year": roic,
+        "historical_s_c_by_year": s_c,
+        "historical_margin_by_year": margin,
+        "historical_revenue_growth_by_year": rev_growth,
+        "historical_roic_avg_3yr": _safe_mean(roic[:3]),
+        "historical_roic_avg_5yr": _safe_mean(roic),
+        "historical_s_c_avg_3yr": _safe_mean(s_c[:3]),
+        "historical_s_c_avg_5yr": _safe_mean(s_c),
+        "historical_margin_avg_3yr": _safe_mean(margin[:3]),
+        "historical_margin_avg_5yr": _safe_mean(margin),
+    }
+
+
 def compute_cashflow_and_growth(
     adjusted: AdjustedFinancials,
     raw: RawFinancials,
@@ -24,6 +107,7 @@ def compute_cashflow_and_growth(
     cost_of_capital: CostOfCapital,
     raw_prior_year: RawFinancials | None = None,
     macro: MacroInputs | None = None,
+    raw_financials_history: list[RawFinancials] | None = None,
 ) -> CashFlowMetrics:
     """
     Compute reinvestment, free cash flows, return metrics, and growth rates.
@@ -109,6 +193,15 @@ def compute_cashflow_and_growth(
     expected_growth_ebit = roic * rir_firm if (roic is not None and rir_firm is not None) else None
     expected_growth_ni = roe * rir_equity if (roe is not None and rir_equity is not None) else None
 
+    # --- Historical-series diagnostics for three-story examination ---
+    historical: dict = {}
+    if raw_financials_history:
+        historical = _compute_historical_series(
+            raw_financials_history,
+            tax_rate=tax_rate,
+            r_and_d_asset_current=adjusted.value_of_research_asset or 0.0,
+        )
+
     return CashFlowMetrics(
         adjusted_capex=adjusted_capex,
         adjusted_d_a=adjusted_d_a,
@@ -123,4 +216,14 @@ def compute_cashflow_and_growth(
         rir_equity=rir_equity,
         expected_growth_ebit=expected_growth_ebit,
         expected_growth_ni=expected_growth_ni,
+        historical_roic_by_year=historical.get("historical_roic_by_year", []),
+        historical_s_c_by_year=historical.get("historical_s_c_by_year", []),
+        historical_margin_by_year=historical.get("historical_margin_by_year", []),
+        historical_revenue_growth_by_year=historical.get("historical_revenue_growth_by_year", []),
+        historical_roic_avg_3yr=historical.get("historical_roic_avg_3yr"),
+        historical_roic_avg_5yr=historical.get("historical_roic_avg_5yr"),
+        historical_s_c_avg_3yr=historical.get("historical_s_c_avg_3yr"),
+        historical_s_c_avg_5yr=historical.get("historical_s_c_avg_5yr"),
+        historical_margin_avg_3yr=historical.get("historical_margin_avg_3yr"),
+        historical_margin_avg_5yr=historical.get("historical_margin_avg_5yr"),
     )
