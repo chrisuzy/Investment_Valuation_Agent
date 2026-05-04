@@ -9,21 +9,38 @@
 
 ## 1. What this spec is
 
-A narrow, display-focused redesign of a single page — **Stories to Numbers** — so it becomes the consolidated surface where the analyst authors the three stories (Growth, Margin, Capital Efficiency) and sees them immediately cross-examined against history, industry, and the required arithmetic. Plus one backend-side mechanical fix: the tax-rate override for years 1–5 (Issue 1 from the Lenovo anomaly audit).
+A narrow, **composition-based** redesign of a single page — **Stories to Numbers** — so it becomes the consolidated surface where the analyst authors the three stories and sees them immediately cross-examined against history, industry, and the required arithmetic. Plus one backend-side mechanical fix: the tax-rate override for years 1–5 (Issue 1 from the Lenovo anomaly audit).
+
+**Composition principle.** The existing adjustable infrastructure on ValuationOutput is preserved and reused, not duplicated or rebuilt. `SensitivityPanel.tsx` already implements:
+- Tornado chart ranking 8 canonical drivers by VPS sensitivity
+- 8 driver cells with ▲/▼ fine-tune controls, Q1/median/Q3 industry chips, live percentile
+- 6 archetype preset cards (Disruptor / Growth / Mature / Utility / Cyclical / Distressed)
+- "↺ Reset to original inputs" button
+- Live impact cards (VPS, market price, P/V, operating assets) with correct listing-vs-reporting currency handling
+
+That component is mounted verbatim on Stories to Numbers with the same `onPatch` / `onPatchMany` props already plumbed through `App.tsx` for ValuationOutput. No functional duplication, no sync logic — editing on either page produces the same PATCH to the session, both pages re-render with the new state on next navigation.
 
 **What this is not:**
 - Not a system redesign. No new pipeline module.
 - No severity scoring, warnings, red flags, or color-coded alerts. The display shows numbers; the analyst judges.
 - No changes to the DCF math. The existing `compute_dcf` projection is untouched.
 - No expansion of inputs. Every hypothesis field already exists in `ValuationAssumptions`; this spec only reorganizes their presentation.
+- **Not removing anything from ValuationOutput.** Its SensitivityPanel mount continues to work exactly as today. The three-story validation is an *additional* layer on Stories to Numbers.
 
 The remaining Lenovo anomalies (2b base-year reinvestment, 3 vintage badges, 5a σ_stock tooltip) are **out of scope for this spec** and will be addressed in a separate short spec later. They touch different pages (ValuationOutput, OptionValue) and don't depend on this work.
 
 ## 2. The new Stories to Numbers page — layout
 
+Composition: existing components preserved + three new components layered on top.
+
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ A. Closed-loop summary strip (sticky top)                             │
+│ 0. Narrative mapping table (EXISTING, kept at top)                    │
+│    Qualitative question → Value driver → Input field → Current value │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ A. Closed-loop summary strip (NEW, sticky below narrative)            │
 │   Story requires ROIC = X%  |  Historical = Y% (5y avg Z%)            │
 │                              |  Industry median = A% (Q1–Q3 B–C%)      │
 │                              |  WACC = W%         Gap: +Δpp           │
@@ -33,58 +50,79 @@ The remaining Lenovo anomalies (2b base-year reinvestment, 3 vintage badges, 5a 
 └──────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────┐
-│ B. Growth Story                                                       │
-│   Your input          (editable) Year 1 growth   Years 2–5 growth     │
-│   Historical annual   (5 yrs)    yr-4  yr-3  yr-2  yr-1  yr-0         │
+│ B. Growth Story — validation rows (NEW)                               │
+│   Historical annual   yr-4  yr-3  yr-2  yr-1  yr-0   revenue growth   │
 │   Averages            3-yr avg  5-yr avg                              │
 │   Industry            median    Q1  Q3                                │
-│   Reverse check       Required ROIC = X%    Historical = Y%    Gap: +Zpp │
+│   Reverse check       Required ROIC = X%  Historical = Y%  Gap: +Zpp  │
 └──────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────┐
-│ C. Margin Story                                                       │
-│   Your input          (editable) Year 1 margin   Target   K (yr)      │
-│   Historical annual   (5 yrs)    yr-4 … yr-0                          │
+│ C. Margin Story — validation rows (NEW)                               │
+│   Historical annual   (5 yrs)  pre-tax operating margin               │
 │   Averages            3-yr avg  5-yr avg                              │
 │   Industry            median    Q1  Q3                                │
-│   (Reverse check contribution: feeds Required ROIC above)             │
 └──────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────┐
-│ D. Capital-Efficiency Story                                           │
-│   Your input          (editable) S/C high-growth   S/C stable         │
-│   Historical annual   (5 yrs)    yr-4 … yr-0                          │
+│ D. Capital-Efficiency Story — validation rows (NEW)                   │
+│   Historical annual   (5 yrs)  Sales / Invested Capital               │
 │   Averages            3-yr avg  5-yr avg                              │
 │   Industry            median    Q1  Q3                                │
-│   Reverse check       Required S/C = X×    Historical = Y×    Gap: +Z× │
+│   Reverse check       Required S/C = X×  Historical = Y×  Gap: +Z×    │
 └──────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────┐
-│ E. Tax rate — year 1 to year 5 override (NEW, Issue 1)                │
-│   Historical annual   (5 yrs)    yr-4 … yr-0   |tax_exp|/|EBT|        │
+│ E. Tax-rate override, Years 1–5 (NEW — Issue 1)                       │
+│   Historical annual   yr-4 … yr-0   |tax_exp|/|EBT|                   │
 │   Averages            3-yr avg  5-yr avg                              │
 │   Override            (editable)  Preset: [Base yr] [3yr] [5yr] [Custom] │
 └──────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────┐
-│ F. Other adjustable drivers (methodology choices)                     │
-│   - stable_growth_rate             - cost_of_capital_stable_override  │
-│   - roic_stable_override           - margin_convergence_year K         │
-│   - failure_probability            - distress_proceeds_pct             │
-│   - failure_tie_to (B/V)           - reinvestment_lag_years + override │
-│   - nol_amount + override          - riskfree_after_yr10 + override    │
-│   - growth_perpetuity_rate + override                                  │
-│   - trapped_cash_amount + tax_rate + override                          │
+│ F. SensitivityPanel (mounted EXISTING component, unchanged)           │
+│    • Impact tornado — ranks 8 drivers by VPS sensitivity              │
+│    • 8 drivers as editable cells with ▲/▼ fine-tune controls,          │
+│      Q1/median/Q3 industry chips, live percentile                     │
+│    • Live impact cards: VPS, market price, P/V, op assets             │
+│      (correct listing-vs-reporting currency handling)                 │
+│    • Archetype presets (6 cards)                                      │
+│    • ↺ Reset to original inputs                                       │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ G. Other methodology-choice drivers (NEW, exposes remaining schema)   │
+│    Not in SensitivityPanel's 8 canonical drivers:                      │
+│    - failure_tie_to (B/V)          - reinvestment_lag_years + override │
+│    - nol_amount + override         - riskfree_after_yr10 + override    │
+│    - growth_perpetuity_rate + override                                 │
+│    - trapped_cash_amount + tax_rate + override                         │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-Order top-to-bottom reflects importance: the closed-loop summary first (the cross-examination headline), then the three story blocks in the order the analyst naturally thinks about them (growth → margin → capital efficiency), then tax (one pane below stories), then the remaining methodology levers.
+**Order rationale.** Narrative mapping at top for orientation; closed-loop strip sticky for headline; three story validation blocks in analyst's natural order (growth → margin → capital efficiency); tax override immediately below because it affects the same year-1–5 projection window as the stories; **SensitivityPanel lower on the page because it's the analyst's fine-tune loop (adjust, see impact, iterate)** — goes below the "here's what your story requires" validation so the analyst sees the diagnosis first and then uses the panel to react; other methodology drivers at bottom as the least-touched set.
+
+**Key point about SensitivityPanel.** Section F is *the existing component* mounted on this page. The 8 canonical drivers it exposes (revenue_growth_next_year, operating_margin_next_year, target_operating_margin, sales_to_capital_high, sales_to_capital_stable, margin_convergence_year, stable_growth_rate, cost_of_capital_stable_override) are the analyst's primary story inputs. Sections B, C, D contain **only the validation rows** (historical, industry, reverse-check) that wrap those inputs — not duplicate input cells. The input cells live in SensitivityPanel's Section F; the validation wraps them there or renders as adjacent sections above.
+
+**Implementation choice for Sections B/C/D validation rows.** Two options:
+- Option i: three separate story-validation blocks above SensitivityPanel (clean, but distance between "here's your input" and "here's its validation" is visually large).
+- Option ii: inject the validation rows directly into SensitivityPanel's driver cell for each of the three story drivers (historical row + industry row + reverse-check row collapsed below each of the three relevant drivers). Requires modifying SensitivityPanel to accept optional per-driver children.
+
+**Recommendation: Option i** for this first iteration — less invasive, keeps SensitivityPanel single-responsibility. If visual separation turns out to be confusing in user testing, switch to Option ii in a follow-up.
 
 ## 3. Mirror strategy (both pages editable)
 
-Per user decision, the editable driver inputs live both here AND remain on the existing surfaces (InputSheet §7, SensitivityPanel, FailureRate page). All three use the same dot-paths (`valuation_assumptions.*`) bound to the same session store through the existing `PATCH /api/valuation/{session_id}` endpoint.
+Because we're **mounting the same `SensitivityPanel` component** on both Stories to Numbers and Valuation Output, there is no duplication and no sync problem. Both pages share:
 
-**No sync work needed.** Editing a value in any location triggers the PATCH, the backend reruns all modules, the response updates the store, and all three pages re-render with the new value on next navigation. This already works today.
+- The same `ValuationAssumptions` dot-paths bound via `onPatch`
+- The same session store updated through `PATCH /api/valuation/{session_id}`
+- The same archetype preset bag, the same Reset-to-original snapshot (the snapshot watches `sessionId` only, per CLAUDE.md, so it doesn't get overwritten by cross-page navigation)
+
+**Plumbing change.** `App.tsx` currently routes `onPatch` and `onPatchMany` into `ValuationOutput`. We'll add the same two props to the `StoriesToNumbers` route. One-line change per route definition; the callbacks themselves are reused.
+
+**No per-page state.** The three-story validation rows (Sections B/C/D) and the tax-override panel (Section E) read from the shared session state; no local component state. Every PATCH anywhere in the app triggers a full re-render on both pages.
+
+The Input Sheet §7 inputs continue to work as they do today — same dot-paths, independent read-only-or-editable decisions per cell.
 
 ## 4. Reverse-calculation math (from `three_story_joint_examination.md §3`)
 
