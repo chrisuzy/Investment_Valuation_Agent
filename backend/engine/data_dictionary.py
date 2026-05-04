@@ -186,6 +186,27 @@ class CashFlowMetrics(BaseModel):
     expected_growth_ebit: float | None = Field(default=None)
     expected_growth_ni: float | None = Field(default=None)
 
+    # --- Historical-series diagnostics for three-story joint examination ---
+    # Most-recent-first; e.g. historical_roic_by_year[0] = FY-0 ROIC.
+    # Each list is up to 5 entries; None where data insufficient.
+    historical_roic_by_year: list[float | None] = Field(default_factory=list)
+    historical_s_c_by_year: list[float | None] = Field(default_factory=list)
+    historical_margin_by_year: list[float | None] = Field(default_factory=list)
+    historical_revenue_growth_by_year: list[float | None] = Field(default_factory=list)
+    historical_roic_avg_3yr: float | None = Field(default=None)
+    historical_roic_avg_5yr: float | None = Field(default=None)
+    historical_s_c_avg_3yr: float | None = Field(default=None)
+    historical_s_c_avg_5yr: float | None = Field(default=None)
+    historical_margin_avg_3yr: float | None = Field(default=None)
+    historical_margin_avg_5yr: float | None = Field(default=None)
+
+
+class TaxHistory(BaseModel):
+    """Five-year historical effective tax rate series (most-recent-first)."""
+    yearly: list[float | None] = Field(default_factory=list)
+    avg_3yr: float | None = Field(default=None)
+    avg_5yr: float | None = Field(default=None)
+
 
 # ---------------------------------------------------------------------------
 # H. Valuation Assumptions (user-adjustable DCF inputs)
@@ -382,6 +403,10 @@ class ValuationAssumptions(BaseModel):
     override_trapped_cash: bool = Field(default=False)
     trapped_cash_amount: float = Field(default=0.0)
     trapped_cash_tax_rate: float = Field(default=0.0)
+    # Manual override for years 1..high_growth_years effective tax rate.
+    # When set, _tax_path uses this instead of macro.tax_rate_effective.
+    # Years 6-10 still converge to marginal as before.
+    effective_tax_rate_override_years_1_5: float | None = Field(default=None)
 
 
 # ---------------------------------------------------------------------------
@@ -401,6 +426,10 @@ class DCFResult(BaseModel):
     value_of_operating_assets: float | None = Field(default=None)
     value_of_equity: float | None = Field(default=None)
     value_per_share_pre_options: float | None = Field(default=None)
+    # Implied ROIC path (per-year closed-loop output of the three-story
+    # examination). Years 1..10; terminal is reported separately.
+    implied_roic_projections: list[float] = Field(default_factory=list)
+    implied_roic_terminal: float | None = Field(default=None)
 
 
 # ---------------------------------------------------------------------------
@@ -500,3 +529,6 @@ class CompanyValuationInput(BaseModel):
     option_inputs: OptionInputs = Field(default_factory=OptionInputs)
     valuation_assumptions: ValuationAssumptions = Field(default_factory=ValuationAssumptions)
     methodology_choices: MethodologyChoices = Field(default_factory=MethodologyChoices)
+    # Historical effective tax rate (last 5 fiscal years) + averages.
+    # Used by the Tax Override Panel on Stories to Numbers as reference data.
+    tax_history: TaxHistory | None = Field(default=None)
