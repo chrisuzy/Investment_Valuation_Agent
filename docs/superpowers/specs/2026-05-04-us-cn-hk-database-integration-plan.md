@@ -506,6 +506,100 @@ An operator-facing **Admin / Data Sources** page. Linked from the sidebar under 
 
 **Path to fully-automated (later):** the watcher option from §6d becomes the "auto" version of this same button. Drop files → watcher detects → runs the same ingest code → UI shows updated timestamps automatically. The UI is unchanged; the button just becomes optional.
 
+## 6f. UI-driven file uploads (new requirement)
+
+Operator never needs SSH or CLI access. The admin page in §6e gets drop zones alongside the manifest lists:
+
+**New endpoints** (beyond the refresh endpoints in §6e):
+- `POST /api/admin/upload/markets-dataset` — multipart upload, accepts `.xls`/`.xlsx`, saves to `US_CN_HK_dataset/`, returns filename + size + saved path.
+- `POST /api/admin/upload/damodaran` — multipart upload, filename determines which file it replaces (e.g. `betaGlobal.xls` → `knowledge_base/damodaran/betaGlobal.xls`). Unknown filenames rejected with a clear error.
+- `POST /api/admin/upload/industry-lookup` — replaces `knowledge_base/industry_lookup/indname.xlsx`.
+
+**Workflow:** Drag .xls onto the drop zone → frontend POSTs multipart → backend saves + auto-triggers ingest for that section only → response carries the refresh-summary JSON → UI renders the summary inline.
+
+**Safety:** each upload replaces the target file atomically (write to `.tmp`, rename). If the subsequent ingest fails, the previous database snapshot is retained (see §6g); the operator sees the error in the summary and can re-upload or add an override.
+
+## 6g. Error tolerance — four layers (new requirement)
+
+Damodaran reformats their tables most years; CIQ occasionally renames a column or adds one. The ingester must survive both and produce a report the operator can act on — **never crash, never produce an empty database from a partial failure.**
+
+### Layer 1 — Permissive header matching (already in the parser module)
+
+`CIQ_HEADER_PATTERNS` uses prefix regex, so `"Total Revenue "` matches all of:
+- `Total Revenue [LTM] (Reported Currency)`
+- `Total Revenue [Latest Annual - 3] (Reported Currency)`
+- `Total Revenue [Latest Annual - 3]` (if CIQ drops the currency suffix)
+
+Patterns use `?` for optional trailing characters where CIQ's pluralization or spacing tends to drift (e.g. `^Total Revenues?`). Widened as specific drifts are observed.
+
+### Layer 2 — Operator-editable YAML overrides
+
+File: `config/header_overrides.yaml`. Zero-code, zero-LLM.
+
+```yaml
+overrides:
+  - header_prefix: "Revenues, Net"
+    variable: revenues
+    currency: reporting
+  - header_prefix: "EBITDA, Normalized"
+    variable: ebitda
+    currency: reporting
+```
+
+Ingester checks the YAML file AFTER the hardcoded patterns — the operator can override or extend without touching Python. Edit the YAML, re-run refresh, done.
+
+### Layer 3 — Unknown columns skipped, NEVER crash
+
+- Unknown CIQ column headers → logged in `ingest_log.unmapped_columns`; column dropped from ingest; neighbouring data ingested normally.
+- Unknown exchange prefixes → logged in `ingest_log.unmapped_exchanges`; the company still lands in `companies` table with `listing_currency = None`; operator can patch `exchange_currency_map.py` later.
+- Unexpected cell values (malformed numbers, unexpected strings in numeric columns) → logged per-row; cell value becomes `None`.
+- Empty mandatory fields (ticker missing, company name missing) → row rejected; counted in summary; other rows proceed.
+
+### Layer 4 — Damodaran: dynamic header-row detection
+
+Existing Damodaran loader uses fixed row offsets (row 8 = header). If Damodaran adds a cover page, this breaks. Replace with:
+
+```python
+def find_header_row(sheet, required_tokens=('Industry Name', 'Number of firms')):
+    """Scan first 30 rows for the one containing all required tokens."""
+    for r in range(min(sheet.nrows, 30)):
+        cells = [str(sheet.cell_value(r, c)).lower() for c in range(sheet.ncols)]
+        if all(any(tok.lower() in cell for cell in cells) for tok in required_tokens):
+            return r
+    return None  # surface as warning; retain previous snapshot
+```
+
+Tokens differ per file (countrystats.xls looks for `'Country'`; capex.xls for `'Industry Name'` + `'Sales/Capital'`). If the header row isn't found, the loader logs the failure, **retains the previously-cached parsed data**, and surfaces the error in the UI — operator sees exactly which file needs attention. The rest of the refresh proceeds.
+
+### What the operator sees after every refresh
+
+A human-readable report in the UI:
+
+```
+Markets Dataset Refresh  · 2026-05-04 23:40:12
+  ✓ 12,929 companies ingested
+  ✓ 0 rows rejected
+  ⚠ 2 unknown column headers (skipped; see below)
+  ⚠ 1 unknown exchange prefix (SGX — 4 tickers have listing_currency=None)
+  Unknown headers:
+    • 'Dividend Yield [Latest Annual] (%)' — not in mapping; add entry to
+      config/header_overrides.yaml if wanted
+    • 'Free Cash Flow [Latest Annual]' — same
+
+Damodaran Refresh  · 2026-05-04 23:40:14
+  ✓ 24 of 26 files reloaded
+  ✗ betaGlobal.xls: header row not found (searched rows 0–29 for
+      'Industry Name' + 'Number of firms')
+      → Check Damodaran's latest layout; may need to edit
+        config/damodaran_overrides.yaml or open a ticket
+      → Previous snapshot from 2025-07-01 is still active
+
+Industry Lookup Refresh
+  ✓ 847 tickers loaded (+12 new since last upload)
+```
+
+**Graceful degradation:** a failure in any single file doesn't corrupt the system. Previous successful data stays loaded; next refresh can retry.
+
 ## 7. Success criteria
 
 1. Running `python -m tools.ingest_us_cn_hk_dataset` populates the SQLite file with ~13,000 companies in under 60 seconds.
