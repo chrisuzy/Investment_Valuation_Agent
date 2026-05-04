@@ -1,4 +1,6 @@
 import { NavLink } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { adminWhoami } from '../api/client';
 
 // Order reflects the valuation workflow: inputs → adjustments & WACC → outputs → cross-checks.
 const NAV = [
@@ -24,6 +26,15 @@ const NAV = [
 ];
 
 export default function Sidebar() {
+  // The admin link only renders when the server has configured
+  // AD_CC_ADMIN_TOKEN AND the browser has a stored token that matches.
+  // Plain users never see the link; cloners of the open-source repo
+  // start with admin disabled until they set their own token.
+  const [adminVisible, setAdminVisible] = useState(false);
+  useEffect(() => {
+    adminWhoami().then((w) => setAdminVisible(w.configured)).catch(() => setAdminVisible(false));
+  }, []);
+
   return (
     <aside className="w-56 shrink-0 border-r border-gray-200 bg-gray-50 min-h-screen p-3">
       <h1 className="text-base font-bold mb-4 px-2">Valuation Sheets</h1>
@@ -44,6 +55,23 @@ export default function Sidebar() {
             {label}
           </NavLink>
         ))}
+        {adminVisible && (
+          <>
+            <div className="mt-3 mb-1 px-2 text-[10px] uppercase text-slate-400 tracking-wide">Admin</div>
+            <NavLink
+              to="/admin"
+              className={({ isActive }) =>
+                `px-3 py-1.5 rounded text-xs transition-colors ${
+                  isActive
+                    ? 'bg-amber-100 text-amber-800 font-medium'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`
+              }
+            >
+              ⚙ Data Sources
+            </NavLink>
+          </>
+        )}
       </nav>
     </aside>
   );

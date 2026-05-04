@@ -18,6 +18,7 @@ import CostOfCapital from './pages/CostOfCapital';
 import FailureRate from './pages/FailureRate';
 import TrailingTwelveMonth from './pages/TrailingTwelveMonth';
 import AnswerKeys from './pages/AnswerKeys';
+import AdminDataSources from './pages/AdminDataSources';
 import CurrencyBanner from './components/CurrencyBanner';
 import UnresolvedFieldsPanel from './components/UnresolvedFieldsPanel';
 import type { ValuationResponse } from './types/valuation';
@@ -168,6 +169,7 @@ function RoutedPages({
         <Route path="/failure"           element={<FailureRate data={data} sessionId={sessionId} onPatch={handleCellUpdate} />} />
         <Route path="/ttm"               element={<TrailingTwelveMonth data={data} sessionId={sessionId} />} />
         <Route path="/answers"           element={<AnswerKeys data={data} sessionId={sessionId} />} />
+        <Route path="/admin"             element={<AdminDataSources />} />
       </Routes>
     </ErrorBoundary>
   );

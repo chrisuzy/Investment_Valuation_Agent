@@ -3,6 +3,40 @@ import type { CompanyValuationInput, ValuationResponse } from '../types/valuatio
 
 const api = axios.create({ baseURL: '/api' });
 
+// ---------------------------------------------------------------------------
+// Admin token — stored in localStorage. When set, every request carries it
+// in the X-Admin-Token header so admin endpoints succeed; all other endpoints
+// ignore it.
+// ---------------------------------------------------------------------------
+
+const ADMIN_TOKEN_KEY = 'ad_cc_admin_token';
+
+export function getAdminToken(): string | null {
+  try {
+    return localStorage.getItem(ADMIN_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAdminToken(token: string | null): void {
+  try {
+    if (token) localStorage.setItem(ADMIN_TOKEN_KEY, token);
+    else localStorage.removeItem(ADMIN_TOKEN_KEY);
+  } catch {
+    /* localStorage unavailable */
+  }
+}
+
+api.interceptors.request.use((config) => {
+  const token = getAdminToken();
+  if (token) {
+    config.headers = config.headers ?? {};
+    (config.headers as Record<string, string>)['X-Admin-Token'] = token;
+  }
+  return config;
+});
+
 export interface SearchResult {
   exchange_ticker: string;
   company_name: string;
@@ -110,5 +144,127 @@ export async function fetchFromFile(
   const { data } = await api.post('/valuation/fetch-from-file', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// Public database endpoints
+// ---------------------------------------------------------------------------
+
+export interface DatabaseSearchResult {
+  ticker: string;
+  company_name: string;
+  exchange_code: string | null;
+  region: string | null;
+  filing_currency: string | null;
+  listing_currency: string | null;
+  period_date_annual: string | null;
+  match_rank: number;
+}
+
+export async function searchDatabase(query: string, limit = 20): Promise<DatabaseSearchResult[]> {
+  if (!query.trim()) return [];
+  const { data } = await api.get('/database/search', { params: { q: query, limit } });
+  return data.results;
+}
+
+export async function companyExists(ticker: string): Promise<{ ticker: string; in_database: boolean; data_as_of: string | null }> {
+  const { data } = await api.get(`/database/company-exists/${encodeURIComponent(ticker)}`);
+  return data;
+}
+
+export async function valueFromDatabase(ticker: string, riskFreeRate = 0.0425): Promise<ValuationResponse> {
+  const { data } = await api.post('/valuation/from-database', {
+    ticker,
+    risk_free_rate: riskFreeRate,
+  });
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// Admin endpoints
+// ---------------------------------------------------------------------------
+
+export interface AdminWhoami {
+  admin: boolean;
+  configured: boolean;
+}
+
+export async function adminWhoami(): Promise<AdminWhoami> {
+  try {
+    const { data } = await api.get('/admin/whoami');
+    return data;
+  } catch {
+    return { admin: false, configured: false };
+  }
+}
+
+export interface FileManifestEntry {
+  name: string;
+  size_bytes: number;
+  size_human: string;
+  mtime: string;
+}
+
+export interface DatasetStatus {
+  markets_dataset: { folder: string; files: FileManifestEntry[] };
+  knowledge_base_damodaran: { folder: string; files: FileManifestEntry[] };
+  industry_lookup: { folder: string; files: FileManifestEntry[] };
+  database: {
+    path: string;
+    exists: boolean;
+    size_bytes?: number;
+    size_human?: string;
+    company_count: number;
+    error?: string;
+  };
+  last_ingest: null | {
+    timestamp_utc: string;
+    n_companies: number;
+    n_rejected: number;
+    n_files: number;
+    unmapped_columns: string[];
+    unmapped_exchanges: string[];
+    warnings: string[];
+    duration_ms: number;
+  };
+}
+
+export async function adminDatasetStatus(): Promise<DatasetStatus> {
+  const { data } = await api.get('/admin/dataset-status');
+  return data;
+}
+
+export async function adminUploadFile(
+  kind: 'markets-dataset' | 'damodaran' | 'industry-lookup',
+  file: File,
+): Promise<{ saved: string; filename: string; size_bytes: number; next_step: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await api.post(`/admin/upload/${kind}`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+export interface RefreshReport {
+  status: string;
+  n_companies?: number;
+  n_rejected?: number;
+  unmapped_columns?: string[];
+  unmapped_exchanges?: string[];
+  warnings?: string[];
+  duration_seconds?: number;
+  file_manifest?: unknown[];
+  [key: string]: unknown;
+}
+
+export async function adminRefreshDatabase(): Promise<RefreshReport> {
+  const { data } = await api.post('/admin/refresh-database');
+  return data;
+}
+
+export async function adminRefreshKnowledgeBase(): Promise<RefreshReport> {
+  const { data } = await api.post('/admin/refresh-knowledge-base');
   return data;
 }
