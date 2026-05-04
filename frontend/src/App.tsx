@@ -153,7 +153,7 @@ function RoutedPages({
         <Route path="/summary"           element={<SummarySheet data={data} sessionId={sessionId} />} />
         <Route path="/valuation-output"  element={<ValuationOutput data={data} sessionId={sessionId} onPatch={handleCellUpdate} onPatchMany={handlePatchMany} />} />
         <Route path="/relative"          element={<RelativeValuation data={data} sessionId={sessionId} />} />
-        <Route path="/stories"           element={<StoriesToNumbers data={data} sessionId={sessionId} />} />
+        <Route path="/stories"           element={<StoriesToNumbers data={data} sessionId={sessionId} onPatch={handleCellUpdate} onPatchMany={handlePatchMany} />} />
         <Route path="/picture"           element={<ValuationPicture data={data} sessionId={sessionId} />} />
         <Route path="/diagnostics"       element={<Diagnostics data={data} sessionId={sessionId} />} />
         <Route path="/options"           element={<OptionValue data={data} sessionId={sessionId} />} />

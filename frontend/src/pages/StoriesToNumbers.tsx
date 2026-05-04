@@ -1,25 +1,48 @@
 import type { ValuationResponse } from '../types/valuation';
+import type { PatchValue } from '../api/client';
 import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
 import { baseYear } from '../lib/baseYear';
+import { requiredROIC, requiredSC } from '../lib/reverseChecks';
+import ClosedLoopStrip from '../components/ClosedLoopStrip';
+import StoryValidationBlock from '../components/StoryValidationBlock';
+import TaxOverridePanel from '../components/TaxOverridePanel';
+import SensitivityPanel from '../components/SensitivityPanel';
 
-export default function StoriesToNumbers({ data, sessionId }: { data: ValuationResponse; sessionId?: string | null }) {
+interface Props {
+  data: ValuationResponse;
+  sessionId?: string | null;
+  onPatch?: (path: string, value: PatchValue) => void | Promise<void>;
+  onPatchMany?: (overrides: Record<string, PatchValue>) => void | Promise<void>;
+}
+
+export default function StoriesToNumbers({ data, onPatch, onPatchMany }: Props) {
   const assumptions = data.inputs.valuation_assumptions;
   const industry = data.inputs.industry_data;
-  const fin = baseYear(data);         // LTM-rotated base year
+  const cf = data.cashflow;
+  const fin = baseYear(data);
 
-  const stories: { narrative: string; driver: string; input: string; value: string | number | null; type: 'hypothesis' | 'calc' | 'reference' }[] = [
+  // Industry stats — some fields carry quartile ranges on industry_data.
+  // For the three-story blocks we need median, Q1, Q3 for each metric.
+  // The current IndustryData shape only exposes single-value medians; if
+  // the backend surfaces quartile stats elsewhere, wire them in here.
+  // Falls back to median-only for Q1/Q3 if not available.
+  const stats = data.industry_stats ?? null;
+  const q = (k: 'revenue_growth_3y' | 'pretax_operating_margin' | 'sales_to_capital') =>
+    stats?.[k] ?? null;
+
+  const narrative: { narrative: string; driver: string; input: string; value: string | number | null; type: 'hypothesis' | 'calc' | 'reference' }[] = [
     {
       narrative: 'How fast will the company grow revenues?',
-      driver: 'Revenue growth rate (next year)',
+      driver: 'Revenue growth (next year)',
       input: 'revenue_growth_next_year',
       value: assumptions.revenue_growth_next_year,
       type: 'hypothesis',
     },
     {
       narrative: 'How fast will it grow after year 1?',
-      driver: 'Revenue growth rate (years 2-5)',
+      driver: 'Revenue growth (years 2–5)',
       input: 'revenue_growth_years_2_5',
       value: assumptions.revenue_growth_years_2_5,
       type: 'hypothesis',
@@ -32,36 +55,36 @@ export default function StoriesToNumbers({ data, sessionId }: { data: ValuationR
       type: 'hypothesis',
     },
     {
-      narrative: 'How long will it take to reach target margin?',
-      driver: 'Year of convergence to target margin',
+      narrative: 'How long until current margin reaches target?',
+      driver: 'Margin convergence year (K)',
       input: 'margin_convergence_year',
       value: assumptions.margin_convergence_year,
       type: 'hypothesis',
     },
     {
-      narrative: 'How efficiently will the company reinvest?',
-      driver: 'Sales/Capital ratio (years 1-5)',
+      narrative: 'How efficiently will capital generate revenue?',
+      driver: 'Sales/Capital (years 1–5)',
       input: 'sales_to_capital_high',
       value: assumptions.sales_to_capital_high,
-      type: 'calc',
+      type: 'hypothesis',
     },
     {
-      narrative: 'What about reinvestment in stable growth?',
-      driver: 'Sales/Capital ratio (years 6-10)',
+      narrative: 'Reinvestment in the stable phase',
+      driver: 'Sales/Capital (years 6–10)',
       input: 'sales_to_capital_stable',
       value: assumptions.sales_to_capital_stable,
-      type: 'calc',
+      type: 'hypothesis',
     },
     {
       narrative: 'How risky is this company?',
-      driver: 'Cost of capital',
+      driver: 'Cost of capital (WACC)',
       input: 'wacc',
       value: data.cost_of_capital?.wacc ?? null,
       type: 'calc',
     },
     {
       narrative: 'What is the long-term growth rate?',
-      driver: 'Stable growth rate',
+      driver: 'Terminal growth',
       input: 'stable_growth_rate',
       value: assumptions.stable_growth_rate ?? data.inputs.macro_inputs.risk_free_rate,
       type: 'hypothesis',
@@ -74,21 +97,7 @@ export default function StoriesToNumbers({ data, sessionId }: { data: ValuationR
       type: 'hypothesis',
     },
     {
-      narrative: 'What are industry margins like?',
-      driver: 'Industry pre-tax operating margin',
-      input: 'pretax_operating_margin',
-      value: industry.pretax_operating_margin,
-      type: 'reference',
-    },
-    {
-      narrative: 'What is the industry reinvestment?',
-      driver: 'Industry sales/capital',
-      input: 'sales_to_capital',
-      value: industry.sales_to_capital,
-      type: 'reference',
-    },
-    {
-      narrative: 'What does the market value look like?',
+      narrative: 'Current market price (reference)',
       driver: 'Current stock price',
       input: 'stock_price',
       value: fin?.stock_price ?? null,
@@ -96,16 +105,25 @@ export default function StoriesToNumbers({ data, sessionId }: { data: ValuationR
     },
   ];
 
+  // Reverse-check values for the three story blocks
+  const impliedROIC = requiredROIC(assumptions.target_operating_margin, assumptions.sales_to_capital_high);
+  const roicAnchor = assumptions.roic_stable_override ?? cf?.historical_roic_avg_5yr ?? data.cost_of_capital?.wacc ?? null;
+  const impliedSCReq = requiredSC(roicAnchor, assumptions.target_operating_margin);
+
   return (
     <div className="max-w-6xl">
-      <h2 className="text-xl font-bold mb-4">Stories to Numbers</h2>
+      <h2 className="text-xl font-bold mb-2">Stories to Numbers</h2>
       <ColorLegend />
 
-      <p className="text-sm text-gray-600 mb-4">
-        This worksheet maps your narrative about the company to the numerical inputs used in the valuation.
-        Each row links a qualitative question to its quantitative driver.
+      <p className="text-sm text-slate-600 mb-3">
+        Three stories — Growth, Margin, Capital Efficiency — are mathematically coupled.
+        This page surfaces what your inputs imply (Required ROIC, Required S/C) alongside
+        historical and industry anchors so you can judge whether the three stories close
+        the loop. Edit drivers in the Sensitivity panel below; everything on this page
+        recomputes on every change.
       </p>
 
+      {/* Narrative mapping table */}
       <SpreadsheetGrid>
         <thead>
           <tr>
@@ -117,7 +135,7 @@ export default function StoriesToNumbers({ data, sessionId }: { data: ValuationR
           </tr>
         </thead>
         <tbody>
-          {stories.map((s, i) => (
+          {narrative.map((s, i) => (
             <tr key={i}>
               <SpreadsheetCell type="label" value={s.narrative} align="left" />
               <SpreadsheetCell type="label" value={s.driver} align="left" />
@@ -131,6 +149,61 @@ export default function StoriesToNumbers({ data, sessionId }: { data: ValuationR
           ))}
         </tbody>
       </SpreadsheetGrid>
+
+      {/* Three-story joint examination */}
+      <ClosedLoopStrip data={data} />
+
+      <StoryValidationBlock
+        title="Growth Story — how fast will revenue grow?"
+        historical={cf?.historical_revenue_growth_by_year ?? []}
+        avg3={null /* not tracked as named field; rely on visible 3yr from cells */}
+        avg5={null}
+        industryMedian={industry?.revenue_growth ?? null}
+        industryQ1={q('revenue_growth_3y')?.q1 ?? null}
+        industryQ3={q('revenue_growth_3y')?.q3 ?? null}
+        formatAs="pct"
+      />
+
+      <StoryValidationBlock
+        title="Margin Story — how profitable will each dollar of revenue be?"
+        historical={cf?.historical_margin_by_year ?? []}
+        avg3={cf?.historical_margin_avg_3yr ?? null}
+        avg5={cf?.historical_margin_avg_5yr ?? null}
+        industryMedian={industry?.pretax_operating_margin ?? null}
+        industryQ1={q('pretax_operating_margin')?.q1 ?? null}
+        industryQ3={q('pretax_operating_margin')?.q3 ?? null}
+        formatAs="pct"
+        reverseCheck={{
+          label: 'Required ROIC (DuPont: margin × S/C)',
+          required: impliedROIC,
+          actual: cf?.historical_roic_avg_5yr ?? null,
+          unit: 'pp',
+        }}
+      />
+
+      <StoryValidationBlock
+        title="Capital-Efficiency Story — how much capital does each dollar of revenue require?"
+        historical={cf?.historical_s_c_by_year ?? []}
+        avg3={cf?.historical_s_c_avg_3yr ?? null}
+        avg5={cf?.historical_s_c_avg_5yr ?? null}
+        industryMedian={industry?.sales_to_capital ?? null}
+        industryQ1={q('sales_to_capital')?.q1 ?? null}
+        industryQ3={q('sales_to_capital')?.q3 ?? null}
+        formatAs="dec"
+        reverseCheck={{
+          label: 'Required S/C (given roicAnchor / your margin)',
+          required: impliedSCReq,
+          actual: cf?.historical_s_c_avg_5yr ?? null,
+          unit: '×',
+        }}
+      />
+
+      {/* Tax-rate override panel */}
+      <TaxOverridePanel data={data} onPatch={onPatch} />
+
+      {/* Reuse the existing SensitivityPanel — same archetype presets,
+          Reset, tornado, 8-driver sliders, live impact cards. */}
+      <SensitivityPanel data={data} onPatch={onPatch} onPatchMany={onPatchMany} />
     </div>
   );
 }
