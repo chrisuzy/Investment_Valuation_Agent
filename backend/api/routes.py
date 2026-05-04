@@ -486,13 +486,47 @@ def fetch_and_run(req: FetchRequest):
 
 @router.post("/valuation/generate-template")
 def generate_template(ticker: str = "NVDA"):
-    """Generate a CIQ template Excel file and return it for download."""
+    """Generate a CIQ template Excel file and return it for download.
+
+    Filename convention: "CIQ_Fetch_Template_<CompanyOrTicker>_<YYMMDD>.xlsx"
+    so successive downloads don't collide in the user's Downloads folder.
+    Example: "CIQ_Fetch_Template_Tencent_260504.xlsx".
+    """
     from tools.generate_ciq_template import generate_template as gen_tmpl
     output_path = gen_tmpl(ticker)
+
+    # Resolve company short-name via the industry mapper when possible;
+    # fall back to the raw ticker. Strip common suffixes ("Ltd", "Inc",
+    # "Corporation", exchange prefixes) and any filename-unsafe chars so
+    # the result drops cleanly into an OS filename.
+    mapper = _get_industry_mapper()
+    company_info = mapper.lookup(ticker)
+    raw_name = company_info.company_name if company_info else ticker
+    # Take the text before the first parenthesis ("Lenovo Group Limited
+    # (SEHK:992)" → "Lenovo Group Limited"); then trim company suffixes.
+    short_name = raw_name.split("(")[0].strip()
+    for suffix in (
+        " Group Limited", " Group", " Limited", " Ltd.", " Ltd",
+        " Inc.", " Inc", " Corporation", " Corp.", " Corp",
+        " Company", " Co.", " Co", " N.V.", " AG", " PLC",
+    ):
+        if short_name.endswith(suffix):
+            short_name = short_name[: -len(suffix)].strip()
+            break
+    # Remove the exchange prefix if ticker was used as a fallback ("SEHK:992" → "992")
+    short_name = short_name.split(":")[-1].strip()
+    # Keep only filename-safe chars
+    safe_name = "".join(c for c in short_name if c.isalnum() or c in (" ", "-", "_"))
+    safe_name = safe_name.strip().replace(" ", "_") or "Company"
+
+    from datetime import datetime as _dt
+    yymmdd = _dt.now().strftime("%y%m%d")
+    download_name = f"CIQ_Fetch_Template_{safe_name}_{yymmdd}.xlsx"
+
     return FileResponse(
         str(output_path),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename=f"CIQ_Fetch_Template.xlsx",
+        filename=download_name,
     )
 
 
