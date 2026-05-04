@@ -26,6 +26,10 @@ interface Props {
   industryQ3: number | null;
   formatAs: 'pct' | 'dec';
   reverseCheck?: ReverseCheck;
+  /** Optional tooltip builder — receives the year offset (0 = FY-0) and returns
+   *  a string describing the exact calculation for that cell. */
+  cellTooltip?: (yearOffset: number) => string | undefined;
+  averageTooltip?: (window: 3 | 5) => string | undefined;
 }
 
 function format(v: number | null | undefined, mode: 'pct' | 'dec'): string {
@@ -44,6 +48,8 @@ export default function StoryValidationBlock({
   industryQ3,
   formatAs,
   reverseCheck,
+  cellTooltip,
+  averageTooltip,
 }: Props) {
   // Labels for historical cells: FY-0 (most recent) on the left.
   const histLabels = ['FY-0', 'FY-1', 'FY-2', 'FY-3', 'FY-4'];
@@ -75,7 +81,8 @@ export default function StoryValidationBlock({
         {histPadded.map((v, i) => (
           <div
             key={i}
-            className="bg-sky-50 border border-sky-200 rounded px-2 py-1 text-center font-mono"
+            title={cellTooltip ? cellTooltip(i) : undefined}
+            className="bg-sky-50 border border-sky-200 rounded px-2 py-1 text-center font-mono cursor-help"
           >
             <div className="text-[9px] text-slate-500">{histLabels[i]}</div>
             <div className="text-slate-900">{format(v, formatAs)}</div>
@@ -86,11 +93,17 @@ export default function StoryValidationBlock({
       {/* Averages row */}
       <div className="grid grid-cols-6 gap-1 text-xs mb-1">
         <div className="text-slate-500 font-medium">Averages</div>
-        <div className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-center font-mono">
+        <div
+          title={averageTooltip ? averageTooltip(3) : 'Mean of the last 3 annual values (skipping None).'}
+          className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-center font-mono cursor-help"
+        >
           <div className="text-[9px] text-slate-500">3-yr</div>
           <div className="text-slate-900">{format(avg3, formatAs)}</div>
         </div>
-        <div className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-center font-mono">
+        <div
+          title={averageTooltip ? averageTooltip(5) : 'Mean of the last 5 annual values (skipping None).'}
+          className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-center font-mono cursor-help"
+        >
           <div className="text-[9px] text-slate-500">5-yr</div>
           <div className="text-slate-900">{format(avg5, formatAs)}</div>
         </div>

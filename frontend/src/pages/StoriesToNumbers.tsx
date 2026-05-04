@@ -110,6 +110,63 @@ export default function StoriesToNumbers({ data, onPatch, onPatchMany }: Props) 
   const roicAnchor = assumptions.roic_stable_override ?? cf?.historical_roic_avg_5yr ?? data.cost_of_capital?.wacc ?? null;
   const impliedSCReq = requiredSC(roicAnchor, assumptions.target_operating_margin);
 
+  // Per-cell tooltip builders — surface the exact calculation for every
+  // historical annual value, reading from raw_financials so the analyst
+  // can cross-check each cell.
+  const history = data.inputs.raw_financials ?? [];
+  const fmtM = (v: number | null | undefined) =>
+    v == null ? '—' : `${(v / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 })}B`;
+  const yearLabel = (i: number) => `FY-${i}`;
+
+  const growthTooltip = (i: number): string => {
+    const cur = history[i]?.revenues;
+    const prev = history[i + 1]?.revenues;
+    if (cur == null || prev == null) return `No data for ${yearLabel(i)} (revenue or prior-year revenue missing).`;
+    const g = cur / prev - 1;
+    return `${yearLabel(i)} revenue growth = (Rev[${yearLabel(i)}] − Rev[${yearLabel(i + 1)}]) / Rev[${yearLabel(i + 1)}]\n= (${fmtM(cur)} − ${fmtM(prev)}) / ${fmtM(prev)}\n= ${(g * 100).toFixed(2)}%\nSource: IQ_TOTAL_REV × IQ_FY-${i} and IQ_FY-${i + 1}.`;
+  };
+
+  const marginTooltip = (i: number): string => {
+    const ebit = history[i]?.ebit;
+    const rev = history[i]?.revenues;
+    if (ebit == null || rev == null) return `No data for ${yearLabel(i)} (EBIT or Revenue missing).`;
+    const m = ebit / rev;
+    return `${yearLabel(i)} pre-tax operating margin = EBIT / Revenue\n= ${fmtM(ebit)} / ${fmtM(rev)}\n= ${(m * 100).toFixed(2)}%\nSource: IQ_EBIT / IQ_TOTAL_REV × IQ_FY-${i}.`;
+  };
+
+  const scTooltip = (i: number): string => {
+    const rev = history[i]?.revenues;
+    const eq = history[i]?.bv_equity;
+    const debt = history[i]?.bv_debt;
+    const cash = history[i]?.cash_and_marketable_securities;
+    if (rev == null || eq == null || debt == null || cash == null) {
+      return `No data for ${yearLabel(i)} (Revenue, BV Equity, BV Debt, or Cash missing for this year).`;
+    }
+    const ic = eq + debt - cash;
+    if (ic === 0) return 'Invested Capital is zero — division undefined.';
+    const sc = rev / ic;
+    return `${yearLabel(i)} Sales / Capital = Revenue / Invested Capital\nIC = BV Equity + BV Debt − Cash\n   = ${fmtM(eq)} + ${fmtM(debt)} − ${fmtM(cash)} = ${fmtM(ic)}\nS/C = ${fmtM(rev)} / ${fmtM(ic)} = ${sc.toFixed(3)}×\nSource: IQ_TOTAL_REV, IQ_TOTAL_EQUITY, IQ_TOTAL_DEBT, IQ_CASH_EQUIV × IQ_FY-${i}.`;
+  };
+
+  const roicTooltip = (i: number): string => {
+    const ebit = history[i]?.ebit;
+    const eff = history[i]?.total_tax_expense != null && history[i]?.earnings_before_tax
+      ? (history[i]!.total_tax_expense! / history[i]!.earnings_before_tax!)
+      : data.inputs.macro_inputs?.tax_rate_effective ?? 0.21;
+    const prev = history[i + 1];
+    if (!prev || ebit == null || prev.bv_equity == null || prev.bv_debt == null || prev.cash_and_marketable_securities == null) {
+      return `No data for ${yearLabel(i)} ROIC — needs current-year EBIT and prior-year (${yearLabel(i + 1)}) Invested Capital.`;
+    }
+    const nopat = ebit * (1 - eff);
+    const icPrev = prev.bv_equity + prev.bv_debt - prev.cash_and_marketable_securities;
+    if (icPrev === 0) return 'Prior-year Invested Capital is zero — ROIC undefined.';
+    const roic = nopat / icPrev;
+    return `${yearLabel(i)} ROIC = NOPAT / Prior-year IC\nNOPAT = EBIT × (1 − eff. tax)\n      = ${fmtM(ebit)} × (1 − ${(eff * 100).toFixed(2)}%)\n      = ${fmtM(nopat)}\nIC[${yearLabel(i + 1)}] = ${fmtM(prev.bv_equity)} + ${fmtM(prev.bv_debt)} − ${fmtM(prev.cash_and_marketable_securities)} = ${fmtM(icPrev)}\nROIC = ${fmtM(nopat)} / ${fmtM(icPrev)} = ${(roic * 100).toFixed(2)}%\nSources: IQ_EBIT, IQ_INC_TAX, IQ_EBT_EXCL × IQ_FY-${i}; IQ_TOTAL_EQUITY, IQ_TOTAL_DEBT, IQ_CASH_EQUIV × IQ_FY-${i + 1}.`;
+  };
+
+  const avgTooltip = (label: string, n: 3 | 5) => (_w: 3 | 5) =>
+    `${n}-year mean of ${label} across FY-0 through FY-${n - 1} (values that resolved to None are skipped).`;
+
   return (
     <div className="max-w-6xl">
       <h2 className="text-xl font-bold mb-2">Stories to Numbers</h2>
@@ -156,12 +213,14 @@ export default function StoriesToNumbers({ data, onPatch, onPatchMany }: Props) 
       <StoryValidationBlock
         title="Growth Story — how fast will revenue grow?"
         historical={cf?.historical_revenue_growth_by_year ?? []}
-        avg3={null /* not tracked as named field; rely on visible 3yr from cells */}
-        avg5={null}
+        avg3={cf?.historical_revenue_growth_avg_3yr ?? null}
+        avg5={cf?.historical_revenue_growth_avg_5yr ?? null}
         industryMedian={industry?.revenue_growth ?? null}
         industryQ1={q('revenue_growth_3y')?.q1 ?? null}
         industryQ3={q('revenue_growth_3y')?.q3 ?? null}
         formatAs="pct"
+        cellTooltip={growthTooltip}
+        averageTooltip={avgTooltip('revenue growth', 5)}
       />
 
       <StoryValidationBlock
@@ -173,12 +232,29 @@ export default function StoriesToNumbers({ data, onPatch, onPatchMany }: Props) 
         industryQ1={q('pretax_operating_margin')?.q1 ?? null}
         industryQ3={q('pretax_operating_margin')?.q3 ?? null}
         formatAs="pct"
+        cellTooltip={marginTooltip}
+        averageTooltip={avgTooltip('pre-tax operating margin', 5)}
         reverseCheck={{
           label: 'Required ROIC (DuPont: margin × S/C)',
           required: impliedROIC,
           actual: cf?.historical_roic_avg_5yr ?? null,
           unit: 'pp',
         }}
+      />
+
+      {/* Historical ROIC block — the closed-loop output measured annually
+          from the firm's own history. Mirrors the other three blocks' layout. */}
+      <StoryValidationBlock
+        title="Historical ROIC — what the firm has actually earned per dollar of capital"
+        historical={cf?.historical_roic_by_year ?? []}
+        avg3={cf?.historical_roic_avg_3yr ?? null}
+        avg5={cf?.historical_roic_avg_5yr ?? null}
+        industryMedian={industry?.roic ?? null}
+        industryQ1={null}
+        industryQ3={null}
+        formatAs="pct"
+        cellTooltip={roicTooltip}
+        averageTooltip={avgTooltip('ROIC', 5)}
       />
 
       <StoryValidationBlock
@@ -190,6 +266,8 @@ export default function StoriesToNumbers({ data, onPatch, onPatchMany }: Props) 
         industryQ1={q('sales_to_capital')?.q1 ?? null}
         industryQ3={q('sales_to_capital')?.q3 ?? null}
         formatAs="dec"
+        cellTooltip={scTooltip}
+        averageTooltip={avgTooltip('Sales/Capital', 5)}
         reverseCheck={{
           label: 'Required S/C (given roicAnchor / your margin)',
           required: impliedSCReq,
@@ -200,6 +278,101 @@ export default function StoriesToNumbers({ data, onPatch, onPatchMany }: Props) 
 
       {/* Tax-rate override panel */}
       <TaxOverridePanel data={data} onPatch={onPatch} />
+
+      {/* How these are calculated — explanatory footer */}
+      <section className="my-4 bg-slate-50 border border-slate-200 rounded-md p-3 text-xs text-slate-700">
+        <h3 className="text-sm font-semibold text-slate-800 mb-2">
+          How each number is calculated
+        </h3>
+        <dl className="space-y-2">
+          <div>
+            <dt className="font-semibold text-slate-900">Historical Revenue Growth (per year)</dt>
+            <dd className="ml-3 font-mono text-[11px]">
+              = (Revenue[t] − Revenue[t−1]) / Revenue[t−1]
+              <br />
+              Source: IQ_TOTAL_REV × IQ_FY-t and IQ_FY-(t+1)
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-slate-900">Historical Pre-tax Operating Margin (per year)</dt>
+            <dd className="ml-3 font-mono text-[11px]">
+              = EBIT[t] / Revenue[t]
+              <br />
+              Source: IQ_EBIT / IQ_TOTAL_REV × IQ_FY-t
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-slate-900">Historical Invested Capital (per year)</dt>
+            <dd className="ml-3 font-mono text-[11px]">
+              IC[t] = BV Equity[t] + BV Debt[t] − Cash[t]
+              <br />
+              Source: IQ_TOTAL_EQUITY + IQ_TOTAL_DEBT − IQ_CASH_EQUIV × IQ_FY-t
+              <br />
+              <span className="italic text-slate-500">
+                Note: for the DCF engine's IC, the R&D capitalization asset is added; this historical diagnostic
+                uses raw book values only for cross-checkability against the 10-K.
+              </span>
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-slate-900">Historical ROIC (per year)</dt>
+            <dd className="ml-3 font-mono text-[11px]">
+              = NOPAT[t] / IC[t−1]
+              <br />
+              NOPAT[t] = EBIT[t] × (1 − effective tax[t])
+              <br />
+              effective tax[t] = IQ_INC_TAX[t] / IQ_EBT_EXCL[t]
+              <br />
+              Uses prior-year IC as the denominator (standard convention — matches the capital in place at the
+              start of the period during which NOPAT was earned).
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-slate-900">Historical Sales / Capital (per year)</dt>
+            <dd className="ml-3 font-mono text-[11px]">
+              = Revenue[t] / IC[t]
+              <br />
+              Uses current-year IC so the ratio reflects the capital in place during the revenue-generating period.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-slate-900">3-yr and 5-yr averages</dt>
+            <dd className="ml-3 font-mono text-[11px]">
+              Simple mean across annual values. Years where the ratio resolved to None (missing components,
+              zero denominator) are skipped — the average is taken over whatever values were computable.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-slate-900">Required ROIC (your story implies)</dt>
+            <dd className="ml-3 font-mono text-[11px]">
+              = target_operating_margin × sales_to_capital_high
+              <br />
+              DuPont identity: ROIC = margin × asset turnover. The ROIC your three stories force the firm to
+              earn for the arithmetic to close. Compare against historical ROIC (has the firm done it?),
+              industry median (has any peer done it?), and WACC (does growth create or destroy value?).
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-slate-900">Required Sales / Capital (your story implies)</dt>
+            <dd className="ml-3 font-mono text-[11px]">
+              = ROIC anchor / target_operating_margin
+              <br />
+              Where ROIC anchor = roic_stable_override (if set) else historical 5-yr avg ROIC else WACC.
+              Answers: given your margin story and a reference ROIC, what asset turnover must the firm achieve?
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-slate-900">Implied ROIC Projections (per year, from the DCF engine)</dt>
+            <dd className="ml-3 font-mono text-[11px]">
+              Implied ROIC[t] = NOPAT[t] / IC[t−1] from the projection path itself.
+              <br />
+              As the stories project forward, IC rolls forward as IC[t] = IC[t−1] + Reinvestment[t].
+              <br />
+              The terminal implied ROIC should converge to terminal WACC (Damodaran: no excess returns in perpetuity).
+            </dd>
+          </div>
+        </dl>
+      </section>
 
       {/* Reuse the existing SensitivityPanel — same archetype presets,
           Reset, tornado, 8-driver sliders, live impact cards. */}
