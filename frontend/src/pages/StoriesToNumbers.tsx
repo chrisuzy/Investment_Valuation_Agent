@@ -9,6 +9,7 @@ import ClosedLoopStrip from '../components/ClosedLoopStrip';
 import StoryValidationBlock from '../components/StoryValidationBlock';
 import TaxOverridePanel from '../components/TaxOverridePanel';
 import SensitivityPanel from '../components/SensitivityPanel';
+import HistoricalDetailTable from '../components/HistoricalDetailTable';
 
 interface Props {
   data: ValuationResponse;
@@ -211,20 +212,20 @@ export default function StoriesToNumbers({ data, onPatch, onPatchMany }: Props) 
       <ClosedLoopStrip data={data} />
 
       <StoryValidationBlock
-        title="Growth Story — how fast will revenue grow?"
+        title="Growth Story — how fast will revenue grow? (CAGR as primary average)"
         historical={cf?.historical_revenue_growth_by_year ?? []}
-        avg3={cf?.historical_revenue_growth_avg_3yr ?? null}
-        avg5={cf?.historical_revenue_growth_avg_5yr ?? null}
+        avg3={cf?.historical_revenue_cagr_3yr ?? null}
+        avg5={cf?.historical_revenue_cagr_5yr ?? null}
         industryMedian={industry?.revenue_growth ?? null}
         industryQ1={q('revenue_growth_3y')?.q1 ?? null}
         industryQ3={q('revenue_growth_3y')?.q3 ?? null}
         formatAs="pct"
         cellTooltip={growthTooltip}
-        averageTooltip={avgTooltip('revenue growth', 5)}
+        averageTooltip={(w) => `${w}-year CAGR = (Rev[FY-0] / Rev[FY-${w}])^(1/${w}) − 1.\nGeometric — financially correct multi-period growth measure, immune to volatility.\nSee the 10-year detail table below for the arithmetic-mean comparison.`}
       />
 
       <StoryValidationBlock
-        title="Margin Story — how profitable will each dollar of revenue be?"
+        title="Margin Story — pre-tax operating margin (EBIT / Revenue)"
         historical={cf?.historical_margin_by_year ?? []}
         avg3={cf?.historical_margin_avg_3yr ?? null}
         avg5={cf?.historical_margin_avg_5yr ?? null}
@@ -275,6 +276,14 @@ export default function StoriesToNumbers({ data, onPatch, onPatchMany }: Props) 
           unit: '×',
         }}
       />
+
+      {/* 10-year detailed historical table — lists every annual value for
+          ROIC, S/C, margin, and growth, with per-year tooltips showing the
+          exact calculation and dual averaging (arithmetic + CAGR/weighted
+          where financially warranted). Sits directly below the three
+          Required-X reverse checks so the analyst can scan annual
+          history alongside the required-values call-out. */}
+      <HistoricalDetailTable data={data} />
 
       {/* Tax-rate override panel */}
       <TaxOverridePanel data={data} onPatch={onPatch} />

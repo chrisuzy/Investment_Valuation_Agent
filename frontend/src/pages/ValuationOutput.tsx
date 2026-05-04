@@ -4,6 +4,7 @@ import SpreadsheetCell from '../components/SpreadsheetCell';
 import SpreadsheetGrid from '../components/SpreadsheetGrid';
 import ColorLegend from '../components/ColorLegend';
 import SensitivityPanel from '../components/SensitivityPanel';
+import TaxOverridePanel from '../components/TaxOverridePanel';
 import { ciq, formula, backendField, user } from '../lib/sources';
 import DualCurrency from '../components/DualCurrency';
 import { fmtMoneyShort } from '../lib/currency';
@@ -428,6 +429,11 @@ export default function ValuationOutput({ data, onPatch, onPatchMany }: Props) {
           })()}
         </tbody>
       </SpreadsheetGrid>
+
+      {/* Tax-rate override panel — mirrors the one on Stories to Numbers.
+          Shared dot-path means editing in either location updates the same
+          session field; the projection table above recomputes on each PATCH. */}
+      <TaxOverridePanel data={data} onPatch={onPatch} />
 
       <SensitivityPanel data={data} onPatch={onPatch} onPatchMany={onPatchMany} />
     </div>
