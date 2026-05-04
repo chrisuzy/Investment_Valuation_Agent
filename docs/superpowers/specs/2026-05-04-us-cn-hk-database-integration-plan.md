@@ -600,6 +600,45 @@ Industry Lookup Refresh
 
 **Graceful degradation:** a failure in any single file doesn't corrupt the system. Previous successful data stays loaded; next refresh can retry.
 
+## 6h. Access control — admin-only upload; public open-source, private data
+
+**Requirement:** the Data Sources page (§6e, §6f) must be restricted to the instance administrator. When others clone the open-source repo and deploy, the page is empty until THEY upload their own data — they become the admin for their instance. The raw CIQ .xls files are confidential; the admin's uploads must not be visible or downloadable by non-admin users of the same instance.
+
+**Mechanism (simple, no full auth system):**
+
+- Server-side config: `AD_CC_ADMIN_TOKEN` environment variable. Any non-empty string the admin chooses. No value set → admin features disabled entirely (all admin endpoints return 404; sidebar item hidden).
+- Client-side: admin navigates to `/admin`, enters the token once; stored in `localStorage`. Subsequent requests to admin endpoints send the token in header `X-Admin-Token`.
+- Backend middleware: `@require_admin` decorator on admin endpoints checks `X-Admin-Token == os.environ['AD_CC_ADMIN_TOKEN']`. Mismatch/missing → 401.
+- Frontend sidebar: the `⚙ Data Sources` item renders only if `localStorage.ad_cc_admin_token` is set AND a lightweight `/api/admin/whoami` returns OK. Unauthenticated users never see the link.
+
+**What's protected vs public:**
+
+| Endpoint | Access | Rationale |
+|---|---|---|
+| `GET /api/database/search?q=` | Public | Search is the primary user-facing feature; no proprietary data leaks (ticker + company name are public facts). |
+| `GET /api/database/company/<ticker>` | Public | Returns derived financial data assembled from the (derived) DB. Consistent with "the DB is open-sourceable" rule. |
+| `POST /api/valuation/from-database` | Public | User-facing valuation. |
+| `GET /api/admin/dataset-status` | **Admin only** | Lists raw filenames + sizes + mtimes — reveals what files exist on the server. |
+| `POST /api/admin/upload/*` | **Admin only** | Write access to the data layer. |
+| `POST /api/admin/refresh-*` | **Admin only** | Rebuilds the DB from raw files. |
+| `GET /api/admin/download/*` | **Admin only — but we won't build this** | No reason to ever serve the raw .xls files back to the browser. Omit entirely so the confidentiality guarantee is structural, not policy. |
+
+**Confidentiality guarantee:** raw CIQ .xls files never leave the server. No endpoint streams them back. Even the admin UI shows filenames + sizes + mtimes — never contents. To download, the admin goes in via SSH (out of scope for the app).
+
+**Open-source ship-ability:**
+
+- Code ships with no admin token set → admin features are dormant
+- Code ships with no raw CIQ files (gitignored, §6d.3)
+- Code ships with an empty SQLite DB (gitignored; built on first admin upload)
+- Anyone cloning the repo gets a working app with:
+  - Template-upload path (works immediately with their own CIQ plugin)
+  - DB search path returns empty results until admin uploads
+  - Data Sources page accessible by setting their own `AD_CC_ADMIN_TOKEN`
+
+**Future multi-user extension (out of scope for this iteration):**
+
+The user mentioned allowing multiple people to upload without letting them see existing files. This requires full auth (sessions, per-user folders, role-based views). Implementable as a follow-up: per-user upload folder `user_data/<user_id>/`, existing SQLite shared read-only across users, admin's files remain admin-only. Not building this now — the single-admin model above satisfies the current confidentiality requirement.
+
 ## 7. Success criteria
 
 1. Running `python -m tools.ingest_us_cn_hk_dataset` populates the SQLite file with ~13,000 companies in under 60 seconds.
