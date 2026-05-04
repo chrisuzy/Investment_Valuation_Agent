@@ -305,9 +305,162 @@ These are cosmetic gaps, not blockers. The DB path can fall back to "same as rep
 ## 6. What I won't build
 
 - A new valuation engine. The DB path ends at `CompanyValuationInput` and feeds the existing `run_full_valuation` orchestrator. Zero changes to M1–M6.
-- A tickers-outside-this-dataset fallback. If a user searches a company not in US/CN/HK, they still get the template path.
 - User authentication for the admin endpoint. Refresh-DB is assumed to be operator-only; bind it to localhost or protect with a simple token in a later iteration.
 - Historical-revision tracking (e.g. "this company was in the DB a quarter ago with different numbers"). Each refresh overwrites.
+
+## 6a. Revision — currency-semantics correction (verified against 5 tickers on 2026-05-04)
+
+CIQ's "Reported Currency" screener modifier is **silently inert** for four columns:
+- `Day Close Price [Latest] (Reported Currency)` — actually LISTING currency
+- `Market Capitalization [Latest] (Reported Currency)` — actually LISTING currency
+- `Options W/Avg. Strike Price of Out. [Latest Annual] (Reported Currency)` — actually LISTING currency
+- `Total Options Out. at End of Year (mm)` — unit (no currency), but included for completeness
+
+**Verified with:** Lenovo SEHK:992 (USD-filed, HKD-listed → price 11.63 = HKD), Tencent SEHK:700 (CNY/HKD), BABA NYSE (CNY/USD → $295B MCap = USD). Single-currency firms AAPL and Moutai can't distinguish and are consistent with either.
+
+**Ingest mapping change:**
+- `Day Close Price → stock_price` (listing) — NOT `stock_price_reporting`
+- `Market Capitalization → mv_equity_listing` (listing) — NOT `mv_equity_reporting`
+- `Options W/Avg. Strike Price → options_avg_strike_listing` (listing)
+
+**Derived fields** (at read time, not stored):
+- `stock_price_reporting = stock_price × fx_rate`
+- `mv_equity_reporting = mv_equity_listing × fx_rate`
+
+Where `fx_rate` is (listing ccy → reporting ccy multiplier). Sources, in priority order:
+1. User override (editable Currency Info panel in UI)
+2. Derived from CIQ template when both listing and reporting variants are fetched (template path only — not available from screener)
+3. External FX feed (not in scope for first iteration)
+4. `None` → surface as UnresolvedField, valuation math uses listing currency throughout until user fills it
+
+**New UI: Currency Information panel.** Placed at the top of InputSheet (and echoed on Stories to Numbers header), shows three badges:
+```
+Filing: USD    Listing: HKD    FX: 0.128  [editable, shows fx_rate_source]
+```
+Editing the FX cell PATCHes `inputs.fx_rate` + sets `fx_rate_source = "manual"`. Orchestrator re-derives stock_price_reporting and mv_equity_reporting on next run.
+
+**Why `stock_price` not `stock_price_reporting` is the right ingest target:** the listing-currency value is the authoritative source (what CIQ gave us, verified price against the exchange snap). The reporting-currency value is always derivable from listing × fx, so we store the primary and derive the alias. Avoids the two-sources-of-truth bug where CIQ's `stock_price_reporting` would disagree with `stock_price × fx_rate_user_override`.
+
+## 6b. Multi-region extensibility (new requirement)
+
+The ingester must be region-agnostic — drop a new regional screener file in `US_CN_HK_dataset/` (or a renamed `markets_dataset/` folder) and re-run; the pipeline should merge rows into the same `companies` / `financials_*` tables without code changes.
+
+**Design:**
+- Ingester takes a `--data-dir` pointing to any folder; scans `*.xls` in it.
+- Each file must expose `Screening` sheet with row-7 headers; the `CIQ_HEADER_PATTERNS` map is shared across all files.
+- Join on `Exchange:Ticker` — naturally unique across regions (exchange prefix differentiates).
+- Region is inferred from the exchange prefix, stored in `companies.region`. Supported regions auto-expand as new prefixes appear. Unknown prefixes → flagged in the `ingest_log.unmapped_exchanges` row, user can patch the exchange map.
+- Rename `US_CN_HK_dataset/` → `markets_dataset/` (or keep `US_CN_HK_dataset` as a legacy alias) once a second regional set exists.
+
+**Implementation implication:** one SQLite, one schema, many regions. Zero code change per new region — just add the file.
+
+## 6c. Knowledge-base auto-refresh (new requirement)
+
+Annual Damodaran data refresh follows the same pattern:
+- `knowledge_base/damodaran/` currently holds betas, capex, margin, WACC, country premium files split across 8 regional variants (Global, US, China, India, Europe, Emerg, Japan, Rest) — plus a `_catalog.json` index.
+- `knowledge_base/industry_lookup/indname.xlsx` maps tickers to Damodaran industry.
+
+**New admin endpoint:** `POST /api/admin/refresh-knowledge-base` — re-reads:
+- All `knowledge_base/damodaran/*.xls*` files → refreshes the in-memory `DamodaranStore` singleton (`backend/data_sources/damodaran_store.py`)
+- `knowledge_base/industry_lookup/indname.xlsx` → refreshes the `IndustryMapper` singleton
+- Rebuilds `_catalog.json` if it exists
+
+**Detection options:**
+- a) Admin endpoint only (user triggers after drop) — **Recommended; lowest-effort**
+- b) File watcher (inotify via `watchdog`) — auto-triggers on file change
+- c) Startup-time cache invalidation — checks file mtimes on every lookup; too chatty
+
+For a yearly refresh cadence, (a) is sufficient. File watcher is a nice-to-have later.
+
+**Consolidated refresh endpoint:** `POST /api/admin/refresh-all` invokes both the markets-dataset refresh and the knowledge-base refresh in sequence. Operator convenience.
+
+## 6d. Hard constraint — zero LLM / Claude Code involvement during refresh
+
+Refresh must be **purely deterministic Python**. The operator's workflow is:
+
+```
+1. Download new CIQ screener files / new Damodaran release
+2. Drop them into the designated folder
+3. Run `python -m tools.refresh_all` OR hit the admin endpoint OR (optional) let the watcher fire
+4. Done. No Claude, no LLM, no human review of the mapping.
+```
+
+**Design implications:**
+
+- **Mapping logic lives in code or config — not prompt.** The `CIQ_HEADER_PATTERNS` table in `backend/data_sources/us_cn_hk_mapping.py` (plus a YAML override at `config/header_overrides.yaml` for future edits) handles header → internal-variable routing via regex match. If CIQ's labels drift slightly, the operator can edit the YAML without touching Python.
+
+- **Fail-loud guarantees.** The ingester surfaces:
+  - Unmapped column headers (listed in `ingest_log.unmapped_columns`)
+  - Unknown exchange prefixes (listed in `ingest_log.unmapped_exchanges`)
+  - Per-column null rates (warn when > 50%)
+  - Row-level rejections (malformed tickers, duplicate primary keys)
+
+  Output is a human-readable report (stdout + logged JSON); no LLM parsing required.
+
+- **Schema changes need a code release, not a refresh.** If CIQ adds a new column type our schema doesn't know about, the operator will see it in `unmapped_columns` and can either:
+  - Ignore it (safe default — column dropped from ingest)
+  - Edit `config/header_overrides.yaml` to route it to an existing field
+  - File a ticket for a code release to add a new schema field
+
+  The ingester itself never "invents" a schema from what it sees.
+
+- **Idempotence.** Re-running the ingester on the same files produces an identical database. No accumulated state. Safe to re-run after a crash.
+
+- **Watchdog mode (optional, deferred).** A `watchdog`-based file-change listener can trigger the ingester automatically. Initially not implemented because:
+  - Quarterly refresh cadence makes it low-value
+  - Adds a background process that complicates deployment
+  - The `tools.refresh_all` CLI + admin endpoint already cover the manual path cleanly
+
+  If adopted later, it's a small addition: one `watchdog.Observer` spawned at backend startup, watching `US_CN_HK_dataset/` and `knowledge_base/` for `*.xls*` file-close events.
+
+## 6e. Frontend refresh trigger (new requirement)
+
+An operator-facing **Admin / Data Sources** page. Linked from the sidebar under a "⚙ Admin" item (only shown when env var `AD_CC_ADMIN=1` is set, so it's hidden in normal sessions).
+
+**What it shows:**
+
+```
+┌─ Markets Dataset ──────────────────────────────────────┐
+│ Folder: /home/chriszhang/.../US_CN_HK_dataset/         │
+│   ginzu_cc_1_1.xls    15.7 MB   modified 2026-05-04 22:22 │
+│   ginzu_cc_1_2.xls    4.7 MB    modified 2026-05-04 22:22 │
+│   ginzu_cc_2_1.xls    16.0 MB   modified 2026-05-04 22:22 │
+│   ginzu_cc_2_2.xls    4.8 MB    modified 2026-05-04 22:22 │
+│ Database last ingested: 2026-05-04 23:40                 │
+│ Companies in database: 12,929                            │
+│ [↻ Refresh Database]                                     │
+└────────────────────────────────────────────────────────┘
+
+┌─ Knowledge Base ───────────────────────────────────────┐
+│ Folder: /home/chriszhang/.../knowledge_base/damodaran/ │
+│   24 files, oldest modified 2025-07-01                  │
+│ Industry lookup: /home/chriszhang/.../industry_lookup/  │
+│   indname.xlsx  modified 2026-03-15                     │
+│ Last refresh: 2026-05-04 23:40                          │
+│ [↻ Refresh Knowledge Base]                              │
+└────────────────────────────────────────────────────────┘
+
+[↻ Refresh Everything]   (runs both in sequence)
+```
+
+**Workflow the operator follows:**
+1. Replace the .xls files in the folder (via their OS file manager, scp, etc.)
+2. Open the Admin page in the browser
+3. Inspect the file list (timestamps confirm the drop worked)
+4. Click "Refresh"
+5. Button shows spinner; backend returns summary (n_companies, n_rejected, unmapped warnings)
+6. Page re-renders with new timestamps
+
+**Implementation pieces:**
+- `GET /api/admin/dataset-status` — returns the two folders' manifests (files + mtimes + sizes) + last-ingest timestamps from `ingest_log`
+- `POST /api/admin/refresh-database` — triggers the markets-dataset ingest; returns JSON summary
+- `POST /api/admin/refresh-knowledge-base` — triggers the KB rebuild; returns summary
+- `POST /api/admin/refresh-all` — both in sequence
+- `frontend/src/pages/Admin.tsx` — the page shown above
+
+**No LLM in this loop.** The backend script is deterministic Python; the UI button just invokes it. Operator never needs to open Claude Code, provide prompts, or interpret output beyond the summary counts.
+
+**Path to fully-automated (later):** the watcher option from §6d becomes the "auto" version of this same button. Drop files → watcher detects → runs the same ingest code → UI shows updated timestamps automatically. The UI is unchanged; the button just becomes optional.
 
 ## 7. Success criteria
 
