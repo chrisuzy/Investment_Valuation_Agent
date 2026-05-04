@@ -409,7 +409,11 @@ function StepTwo({
               )}
             </button>
             <p className="text-xs text-gray-500">
-              The file will download as <code className="bg-gray-100 px-1 rounded">CIQ_Fetch_Template.xlsx</code>.
+              The file will download as{' '}
+              <code className="bg-gray-100 px-1 rounded">
+                CIQ_Fetch_Template_&lt;Company&gt;_{new Date().toISOString().slice(2, 10).replace(/-/g, '')}.xlsx
+              </code>
+              — company name and today&apos;s date are injected by the backend.
             </p>
           </>
         ) : (

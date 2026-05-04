@@ -61,14 +61,27 @@ export async function fetchSensitivity(
 }
 
 export async function downloadTemplate(ticker: string = 'NVDA'): Promise<void> {
-  const { data } = await api.post('/valuation/generate-template', null, {
+  const response = await api.post('/valuation/generate-template', null, {
     params: { ticker },
     responseType: 'blob',
   });
-  const url = window.URL.createObjectURL(data);
+  // Extract filename from Content-Disposition so the browser saves the file
+  // under the server-generated name (CIQ_Fetch_Template_<Company>_<YYMMDD>.xlsx).
+  // Without this, the <a download=...> attribute below overrides the header
+  // and every download collapses to the same generic name.
+  let filename = 'CIQ_Fetch_Template.xlsx';
+  const cd: string | undefined = response.headers?.['content-disposition'];
+  if (cd) {
+    // Accept both filename="X" and filename=X forms.
+    const match = /filename\*?=(?:UTF-8''|")?([^";]+)"?/i.exec(cd);
+    if (match && match[1]) {
+      filename = decodeURIComponent(match[1].trim());
+    }
+  }
+  const url = window.URL.createObjectURL(response.data);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'CIQ_Fetch_Template.xlsx';
+  a.download = filename;
   a.click();
   window.URL.revokeObjectURL(url);
 }
