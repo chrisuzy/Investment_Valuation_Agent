@@ -83,6 +83,10 @@ export default function App() {
                 <span className="text-sm text-gray-500">Valuing: </span>
                 <span className="font-bold text-gray-800">{data.inputs.company_name || data.ticker}</span>
                 <span className="text-gray-400 ml-2">({data.ticker})</span>
+                <span className="text-gray-400 mx-2">·</span>
+                <span className="text-sm text-gray-600">
+                  {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                </span>
               </div>
               <div className="flex gap-3 items-center">
                 {data.inputs.raw_financials.length > 0 && (
