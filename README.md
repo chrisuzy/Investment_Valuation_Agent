@@ -148,6 +148,19 @@ Open `http://localhost:5173/`. Upload a populated data workbook. Get a DCF.
 
 **→ Full walkthrough:** [**Tutorial — Value Microsoft in 5 minutes**](docs/TUTORIAL.md)
 
+### Optional: admin mode (batch data management)
+
+A maintainer-facing **Data Sources** page lets you upload screener files, Damodaran reference tables, and the industry lookup via drag-drop, then rebuild the in-app markets database with one click. Hidden by default.
+
+```bash
+# Choose any secret; share it only with people who should manage data.
+AD_CC_ADMIN_TOKEN=your-secret-here uvicorn api.main:app --port 8000
+```
+
+The sidebar shows a `⚙ Data Sources` link when admin mode is enabled on the server. Click, paste your token once, drag files, click `↻ Rebuild`. Full design rationale in [`docs/superpowers/specs/2026-05-04-us-cn-hk-database-integration-plan.md`](docs/superpowers/specs/2026-05-04-us-cn-hk-database-integration-plan.md) (§6e–§6h).
+
+Without the env var set, all admin endpoints return 404 and the sidebar link stays hidden — safe default for public deployments.
+
 ---
 
 ## 🗺 The 9-module pipeline

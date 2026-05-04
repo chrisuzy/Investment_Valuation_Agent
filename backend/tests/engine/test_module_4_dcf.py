@@ -69,10 +69,18 @@ def cf_metrics():
 class TestDCF:
 
     def test_basic_dcf(self, cf_metrics, cost_of_capital, adjusted, raw, macro):
-        """Basic 10-year DCF projection."""
+        """Basic 10-year DCF projection.
+
+        Note: revenue_growth_next_year must be explicitly set. Since the
+        silent ROIC × RIR cascade was removed (commit e6b60ee), a blank
+        growth input stays blank → 0% growth → flat EBIT. The folder's
+        philosophy (module_05 §2) is that growth is analyst judgment; this
+        test now makes that judgment explicit with a 4% year-1 growth rate.
+        """
         assumptions = ValuationAssumptions(
             projection_years=10,
             high_growth_years=5,
+            revenue_growth_next_year=0.04,   # 4% growth — explicit story input
         )
 
         result = compute_dcf(cf_metrics, cost_of_capital, adjusted, raw, assumptions, macro)
