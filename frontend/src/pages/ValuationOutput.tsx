@@ -8,6 +8,8 @@ import { ciq, formula, backendField, user } from '../lib/sources';
 import DualCurrency from '../components/DualCurrency';
 import { fmtMoneyShort } from '../lib/currency';
 import { baseYear, baseYearEbit } from '../lib/baseYear';
+import { getField } from '../lib/baseYearVintage';
+import VintageBadge from '../components/VintageBadge';
 
 // ---------- helpers ----------
 
@@ -47,6 +49,16 @@ export default function ValuationOutput({ data, onPatch, onPatchMany }: Props) {
   const assumptions = inputs.valuation_assumptions;
   const macro = inputs.macro_inputs;
 
+  // Per-field vintage for the prominent base-year values. Issue 3 from
+  // the Lenovo audit: LTM may have some fields null on thin-feed tickers;
+  // we fall back field-by-field to annual[0] (10-K) then annual[1] (10-K-1)
+  // and surface the source next to each affected cell.
+  const revVintage = getField(data, 'revenues');
+  const debtVintage = getField(data, 'bv_debt');
+  const cashVintage = getField(data, 'cash_and_marketable_securities');
+  const sharesVintage = getField(data, 'shares_outstanding');
+  const priceVintage = getField(data, 'stock_price');
+
   // 13 columns: base year + years 1-10 + terminal year
   const colCount = 13;
   const headers = [
@@ -57,9 +69,10 @@ export default function ValuationOutput({ data, onPatch, onPatchMany }: Props) {
 
   // ---------- derived projection arrays (length 12 each) ----------
 
-  // Revenues: index 0 = base-year, 1..11 from revenue_projections
+  // Revenues: index 0 = base-year, 1..11 from revenue_projections.
+  // Base-year falls back field-by-field: LTM.revenues → FY-0.revenues → FY-1.revenues.
   const revenues: (number | undefined)[] = Array(colCount).fill(undefined);
-  revenues[0] = fin0.revenues;
+  revenues[0] = (revVintage.value ?? fin0.revenues) as number | undefined;
   if (dcf?.revenue_projections) {
     dcf.revenue_projections.forEach((v, i) => {
       revenues[i + 1] = v;
@@ -195,9 +208,12 @@ export default function ValuationOutput({ data, onPatch, onPatchMany }: Props) {
   // (the engine DOES subtract minority and add cross-holdings).
   // Prefer the CostOfCapital.mv_debt_total (includes lease PV and
   // convertible straight part) when available, falling back to raw bv_debt.
-  const debt = data.cost_of_capital?.mv_debt_total ?? fin0.bv_debt;
+  // Equity-bridge components — use per-field vintage cascade so thin-LTM
+  // tickers don't show blank cells when the value exists in a different
+  // vintage (Issue 3).
+  const debt = (data.cost_of_capital?.mv_debt_total ?? debtVintage.value ?? fin0.bv_debt) as number | undefined;
   const minorityInterests = fin0.minority_interests ?? 0;
-  const cash = fin0.cash_and_marketable_securities;
+  const cash = (cashVintage.value ?? fin0.cash_and_marketable_securities) as number | undefined;
   const nonOpAssets = fin0.cross_holdings ?? 0;
 
   const equityValue = dcf?.value_of_equity;
@@ -208,9 +224,9 @@ export default function ValuationOutput({ data, onPatch, onPatchMany }: Props) {
       ? equityValue - optionsValue
       : undefined;
 
-  const sharesOutstanding = fin0.shares_outstanding;
+  const sharesOutstanding = (sharesVintage.value ?? fin0.shares_outstanding) as number | undefined;
   const valuePerShare = data.final?.value_per_share;
-  const currentPrice = fin0.stock_price;
+  const currentPrice = (priceVintage.value ?? fin0.stock_price) as number | undefined;
   const priceAsPctOfValue =
     currentPrice !== null &&
     currentPrice !== undefined &&
@@ -278,6 +294,19 @@ export default function ValuationOutput({ data, onPatch, onPatchMany }: Props) {
       <h2 className="text-lg font-bold mb-4">DCF Valuation Output</h2>
 
       <ColorLegend />
+
+      {/* Base-year vintage summary — shows which vintage each key field
+          came from (LTM / 10-K / 10-K-1). Useful when LTM has thin
+          quarterly data and some fields cascade down to the annual
+          filings. (Issue 3 from the Lenovo audit.) */}
+      <div className="text-xs text-slate-500 mb-3 flex flex-wrap gap-x-3 gap-y-1 items-center">
+        <span className="font-medium">Base-year vintage:</span>
+        <span>Revenue <VintageBadge source={revVintage.vintage} /></span>
+        <span>BV Debt <VintageBadge source={debtVintage.vintage} /></span>
+        <span>Cash <VintageBadge source={cashVintage.vintage} /></span>
+        <span>Shares <VintageBadge source={sharesVintage.vintage} /></span>
+        <span>Stock Price <VintageBadge source={priceVintage.vintage} /></span>
+      </div>
 
       {/* ===== Section 1: Projection Table ===== */}
       <div className="overflow-x-auto">
