@@ -244,6 +244,8 @@ export interface CashFlowMetrics {
   historical_s_c_avg_5yr: number | null;
   historical_margin_avg_3yr: number | null;
   historical_margin_avg_5yr: number | null;
+  historical_revenue_growth_avg_3yr: number | null;
+  historical_revenue_growth_avg_5yr: number | null;
 }
 
 export interface TaxHistory {

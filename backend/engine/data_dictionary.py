@@ -199,6 +199,8 @@ class CashFlowMetrics(BaseModel):
     historical_s_c_avg_5yr: float | None = Field(default=None)
     historical_margin_avg_3yr: float | None = Field(default=None)
     historical_margin_avg_5yr: float | None = Field(default=None)
+    historical_revenue_growth_avg_3yr: float | None = Field(default=None)
+    historical_revenue_growth_avg_5yr: float | None = Field(default=None)
 
 
 class TaxHistory(BaseModel):

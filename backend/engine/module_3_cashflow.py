@@ -43,16 +43,22 @@ def _compute_historical_series(
     the folder's per-year R&D capitalization would require re-running M1 five
     times; since this is diagnostic display only, we use the current value).
     Any component missing → that year's entry is None.
-    """
-    n = min(len(history), 5)
-    roic = [None] * n
-    s_c = [None] * n
-    margin = [None] * n
-    rev_growth = [None] * n
 
-    # Per-year IC (current-year balance sheet)
+    The DISPLAY window is 5 years, but we look one extra year back (to i+1=5)
+    for the ROIC prior-year-IC denominator and the revenue-growth prior
+    revenue, so FY-4 ROIC / RevGrowth compute cleanly when the CIQ template
+    returned at least 6 years of annual history (it returns 11 by default).
+    """
+    n_display = min(len(history), 5)
+    n_total = min(len(history), 6)  # display window + 1 lookback slot
+    roic: list[float | None] = [None] * n_display
+    s_c: list[float | None] = [None] * n_display
+    margin: list[float | None] = [None] * n_display
+    rev_growth: list[float | None] = [None] * n_display
+
+    # Per-year IC for every year we can compute one (display window + lookback)
     ic_current: list[float | None] = []
-    for i in range(n):
+    for i in range(n_total):
         f = history[i]
         bv_eq = f.bv_equity
         bv_debt = f.bv_debt
@@ -62,7 +68,7 @@ def _compute_historical_series(
         else:
             ic_current.append(None)
 
-    for i in range(n):
+    for i in range(n_display):
         f = history[i]
         ebit_i = f.ebit
         rev_i = f.revenues
@@ -75,13 +81,14 @@ def _compute_historical_series(
         if rev_i is not None and ic_current[i] not in (None, 0):
             s_c[i] = rev_i / ic_current[i]
 
-        # ROIC — prior-year IC (i+1 in a most-recent-first list)
-        if i + 1 < n and ebit_i is not None and ic_current[i + 1] not in (None, 0):
+        # ROIC — prior-year IC (i+1 in a most-recent-first list); reaches
+        # one year beyond the display window into ic_current[n_display].
+        if i + 1 < n_total and ebit_i is not None and ic_current[i + 1] not in (None, 0):
             nopat_i = ebit_i * (1 - tax_rate)
             roic[i] = nopat_i / ic_current[i + 1]
 
-        # Revenue growth — from prior year
-        if i + 1 < n:
+        # Revenue growth — from prior year (also reaches one year beyond)
+        if i + 1 < len(history):
             rev_prev = history[i + 1].revenues
             if rev_i is not None and rev_prev not in (None, 0):
                 rev_growth[i] = rev_i / rev_prev - 1
@@ -97,6 +104,8 @@ def _compute_historical_series(
         "historical_s_c_avg_5yr": _safe_mean(s_c),
         "historical_margin_avg_3yr": _safe_mean(margin[:3]),
         "historical_margin_avg_5yr": _safe_mean(margin),
+        "historical_revenue_growth_avg_3yr": _safe_mean(rev_growth[:3]),
+        "historical_revenue_growth_avg_5yr": _safe_mean(rev_growth),
     }
 
 
@@ -226,4 +235,6 @@ def compute_cashflow_and_growth(
         historical_s_c_avg_5yr=historical.get("historical_s_c_avg_5yr"),
         historical_margin_avg_3yr=historical.get("historical_margin_avg_3yr"),
         historical_margin_avg_5yr=historical.get("historical_margin_avg_5yr"),
+        historical_revenue_growth_avg_3yr=historical.get("historical_revenue_growth_avg_3yr"),
+        historical_revenue_growth_avg_5yr=historical.get("historical_revenue_growth_avg_5yr"),
     )
