@@ -201,6 +201,23 @@ class CashFlowMetrics(BaseModel):
     historical_margin_avg_5yr: float | None = Field(default=None)
     historical_revenue_growth_avg_3yr: float | None = Field(default=None)
     historical_revenue_growth_avg_5yr: float | None = Field(default=None)
+    # --- Extended 10-year window ---
+    historical_roic_avg_10yr: float | None = Field(default=None)
+    historical_s_c_avg_10yr: float | None = Field(default=None)
+    historical_margin_avg_10yr: float | None = Field(default=None)
+    historical_revenue_growth_avg_10yr: float | None = Field(default=None)
+    # --- CAGR (geometric) for revenue growth ---
+    # Financially correct multi-period growth measure: (Rev[0]/Rev[n])^(1/n) - 1.
+    # Different from avg of annual growth rates (arithmetic) which is volatility-
+    # sensitive.
+    historical_revenue_cagr_3yr: float | None = Field(default=None)
+    historical_revenue_cagr_5yr: float | None = Field(default=None)
+    historical_revenue_cagr_10yr: float | None = Field(default=None)
+    # --- NOPAT-weighted ROIC (Σ NOPAT / Σ prior-year IC) ---
+    # More robust than arithmetic mean when IC varies substantially year-to-year.
+    historical_roic_weighted_3yr: float | None = Field(default=None)
+    historical_roic_weighted_5yr: float | None = Field(default=None)
+    historical_roic_weighted_10yr: float | None = Field(default=None)
 
 
 class TaxHistory(BaseModel):

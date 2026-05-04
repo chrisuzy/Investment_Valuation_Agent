@@ -246,6 +246,19 @@ export interface CashFlowMetrics {
   historical_margin_avg_5yr: number | null;
   historical_revenue_growth_avg_3yr: number | null;
   historical_revenue_growth_avg_5yr: number | null;
+  // 10-year window
+  historical_roic_avg_10yr: number | null;
+  historical_s_c_avg_10yr: number | null;
+  historical_margin_avg_10yr: number | null;
+  historical_revenue_growth_avg_10yr: number | null;
+  // Revenue CAGR (geometric; financially correct multi-period growth)
+  historical_revenue_cagr_3yr: number | null;
+  historical_revenue_cagr_5yr: number | null;
+  historical_revenue_cagr_10yr: number | null;
+  // NOPAT-weighted ROIC (Σ NOPAT / Σ IC)
+  historical_roic_weighted_3yr: number | null;
+  historical_roic_weighted_5yr: number | null;
+  historical_roic_weighted_10yr: number | null;
 }
 
 export interface TaxHistory {
