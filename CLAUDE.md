@@ -184,11 +184,44 @@ Color convention (SpreadsheetCell types):
 # Backend
 cd backend && uvicorn api.main:app --reload --port 8000
 
+# With admin features enabled (uploads, refresh, etc.)
+AD_CC_ADMIN_TOKEN=<your-secret> uvicorn api.main:app --reload --port 8000
+
 # Frontend
 cd frontend && npm run dev
 ```
 
-Frontend dev server: http://localhost:5173  
+Frontend dev server: http://localhost:5173
 API: http://localhost:8000/api
+
+---
+
+## Markets DB (US + CN + HK company dataset)
+
+**What it is.** ~13k companies across NasdaqGS/NasdaqGM/NasdaqCM/NYSE/SEHK/SHSE/SZSE, ingested from CIQ Screener .xls exports into SQLite at `backend/data_sources/us_cn_hk.sqlite`. Feeds a "Value from Database" fast path that skips template download/fill/upload.
+
+**Two paths coexist:**
+- DB path: `/api/database/search` → `/api/valuation/from-database`. Public endpoints. Instant.
+- Template path: existing `/api/valuation/fetch-from-file`. Still works for tickers outside the ingested regions.
+
+Both paths converge at `run_full_valuation` — identical valuation math.
+
+**Admin-gated data management** (plan §6h):
+- Env var `AD_CC_ADMIN_TOKEN` — no value set → all admin endpoints return 404
+- Admin UI at `/admin` (sidebar item hidden unless `adminWhoami` returns `configured: true`)
+- Upload .xls files via drag-drop, then click Rebuild Database
+- Raw file download intentionally not implemented — confidentiality is structural
+
+**Key files:**
+- `backend/data_sources/us_cn_hk_db.py` — schema + query helpers
+- `backend/data_sources/us_cn_hk_mapping.py` — deterministic CIQ header → internal variable mapping + parsers
+- `backend/tools/ingest_us_cn_hk_dataset.py` — CLI ingester (4.4s for ~13k companies)
+- `backend/api/admin.py` + `backend/api/database.py` — endpoints
+- `frontend/src/pages/AdminDataSources.tsx` — upload UI
+- `docs/superpowers/specs/2026-05-04-us-cn-hk-database-integration-plan.md` — full design spec
+
+**Currency-semantics gotcha** (plan §6a): CIQ Screener's "Reported Currency" modifier is silently inert for four columns (Day Close Price, Market Cap, Options Avg Strike, Options Out). Those always come through in listing currency. The ingester routes them to listing-currency schema fields (`stock_price`, `mv_equity_listing`, `options_avg_strike`). The orchestrator derives reporting-ccy variants when the user sets fx_rate manually via the Currency Info panel on Input Sheet.
+
+**.gitignore rules:** raw CIQ .xls files never committed (`US_CN_HK_dataset/`, `ginzu_cc_*.xls*`). SQLite artifact never committed. Confidentiality is structural.
 
 GitHub repo: https://github.com/chrisuzy/Investment_Valuation_Agent
