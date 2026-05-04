@@ -9,6 +9,8 @@ from fastapi.staticfiles import StaticFiles
 
 from .routes import router
 from .export import router as export_router
+from .admin import router as admin_router
+from .database import router as database_router, valuation_router as db_valuation_router
 
 app = FastAPI(title="Valuation Engine API", version="0.1.0")
 
@@ -22,6 +24,10 @@ app.add_middleware(
 
 app.include_router(router)
 app.include_router(export_router)
+# Admin + DB endpoints live under /api/admin and /api/database; mount at /api/*.
+app.include_router(admin_router, prefix="/api")
+app.include_router(database_router, prefix="/api")
+app.include_router(db_valuation_router, prefix="/api")
 
 DIST_DIR = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
