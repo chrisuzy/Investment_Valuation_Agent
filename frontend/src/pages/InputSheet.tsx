@@ -259,6 +259,78 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
               { label: 'Book Value of Equity', key: 'bv_equity', type: 'data' },
               { label: 'Book Value of Debt', key: 'bv_debt', type: 'data' },
               { label: 'Shares Outstanding', key: 'shares_outstanding', type: 'data' },
+              // --- Ratios (computed from Income Statement + Balance Sheet) ---
+              // Each row's calc runs per-year; tooltips surface the exact formula
+              // and the source CIQ fields so the user can cross-check every cell.
+              { label: 'RATIOS', type: 'section' },
+              {
+                label: '  Invested Capital',
+                type: 'calc',
+                calc: (f) => (f.bv_equity != null && f.bv_debt != null && f.cash_and_marketable_securities != null)
+                  ? (f.bv_equity + f.bv_debt - f.cash_and_marketable_securities)
+                  : null,
+              },
+              {
+                label: '  ROIC',
+                type: 'calc',
+                calc: (f, prev) => {
+                  const taxRate = (f.total_tax_expense != null && f.earnings_before_tax && f.earnings_before_tax > 0)
+                    ? f.total_tax_expense / f.earnings_before_tax
+                    : 0.21;
+                  const nopat = f.ebit != null ? f.ebit * (1 - taxRate) : null;
+                  if (!prev) return null;
+                  const icPrior =
+                    (prev.bv_equity != null && prev.bv_debt != null && prev.cash_and_marketable_securities != null)
+                      ? (prev.bv_equity + prev.bv_debt - prev.cash_and_marketable_securities)
+                      : null;
+                  if (nopat == null || icPrior == null || icPrior === 0) return null;
+                  return nopat / icPrior;
+                },
+              },
+              {
+                label: '  Sales / Capital',
+                type: 'calc',
+                calc: (f) => {
+                  const ic = (f.bv_equity != null && f.bv_debt != null && f.cash_and_marketable_securities != null)
+                    ? (f.bv_equity + f.bv_debt - f.cash_and_marketable_securities)
+                    : null;
+                  if (f.revenues == null || ic == null || ic === 0) return null;
+                  return f.revenues / ic;
+                },
+              },
+              {
+                label: '  Reinvestment Rate (CapEx − D&A + ΔWC) / NOPAT',
+                type: 'calc',
+                calc: (f, prev) => {
+                  if (f.ebit == null || f.earnings_before_tax == null || f.earnings_before_tax <= 0 || f.total_tax_expense == null) return null;
+                  const taxRate = f.total_tax_expense / f.earnings_before_tax;
+                  const nopat = f.ebit * (1 - taxRate);
+                  if (nopat === 0) return null;
+                  if (f.capex == null || f.d_a == null) return null;
+                  const dWC = (f.change_in_noncash_wc != null) ? f.change_in_noncash_wc : 0;
+                  const reinvestment = f.capex - f.d_a + dWC;
+                  return reinvestment / nopat;
+                },
+              },
+              {
+                label: '  Fundamental Growth (ROIC × RIR)',
+                type: 'calc',
+                calc: (f, prev) => {
+                  if (f.ebit == null || f.earnings_before_tax == null || f.earnings_before_tax <= 0 || f.total_tax_expense == null) return null;
+                  const taxRate = f.total_tax_expense / f.earnings_before_tax;
+                  const nopat = f.ebit * (1 - taxRate);
+                  if (nopat === 0 || !prev) return null;
+                  const icPrior = (prev.bv_equity != null && prev.bv_debt != null && prev.cash_and_marketable_securities != null)
+                    ? (prev.bv_equity + prev.bv_debt - prev.cash_and_marketable_securities) : null;
+                  if (icPrior == null || icPrior === 0) return null;
+                  if (f.capex == null || f.d_a == null) return null;
+                  const dWC = (f.change_in_noncash_wc != null) ? f.change_in_noncash_wc : 0;
+                  const reinvestment = f.capex - f.d_a + dWC;
+                  const roic = nopat / icPrior;
+                  const rir = reinvestment / nopat;
+                  return roic * rir;
+                },
+              },
             ];
 
             return rows.map((row, ri) => {
@@ -272,33 +344,81 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
                 );
               }
               if (row.type === 'calc' && row.calc) {
-                // Build a synthetic LTM RawFinancials for computed rows
+                // Build a synthetic LTM RawFinancials for computed rows.
+                // Include balance-sheet fields too so ROIC / Sales/Capital /
+                // Reinvestment row calcs work on the LTM column (they read
+                // bv_equity, bv_debt, cash, capex, d_a in addition to income items).
                 const ltmFake = {
                   fiscal_year: 0,
                   revenues: ltmVal('revenues') ?? 0,
                   ebit: ltmVal('ebit') ?? 0,
                   earnings_before_tax: ltmVal('earnings_before_tax'),
                   total_tax_expense: ltmVal('total_tax_expense'),
+                  bv_equity: ltmVal('bv_equity'),
+                  bv_debt: ltmVal('bv_debt'),
+                  cash_and_marketable_securities: ltmVal('cash_and_marketable_securities'),
+                  capex: ltmVal('capex'),
+                  d_a: ltmVal('d_a'),
+                  change_in_noncash_wc: ltmVal('change_in_noncash_wc'),
                 } as RawFinancials;
-                let ltmCalc: number | null = null;
-                if (row.label.includes('Tax Rate')) {
-                  ltmCalc = row.calc(ltmFake);
-                } else if (row.label.includes('Margin') && ltmFake.revenues) {
-                  ltmCalc = row.calc(ltmFake);
-                } else if (row.label.includes('Growth') && ltmFake.revenues && fin0) {
-                  ltmCalc = row.calc(ltmFake, fin0);
-                }
-                const calcFormula = row.label.includes('Margin') ? '= EBIT / Revenue'
-                  : row.label.includes('Tax Rate') ? '= Tax Expense / EBT'
-                  : '= (Revenue[t] - Revenue[t-1]) / Revenue[t-1]';
+
+                // Decide which format to render the result in: percent for
+                // most rows, raw decimal for Sales/Capital and Invested
+                // Capital dollar value.
+                const isDec = row.label.includes('Sales / Capital');
+                const isDollar = row.label.includes('Invested Capital');
+
+                // LTM calc — needs prior-year context for ROIC / fundamental
+                // growth / rev growth. Use fin0 (most recent annual) as the
+                // prior-period anchor for LTM-column calcs.
+                const ltmCalc = row.calc(ltmFake, fin0);
+
+                // Formula explanation for tooltip. Shown on every cell.
+                const calcFormula =
+                  row.label.includes('Margin')
+                    ? 'Pre-tax operating margin = EBIT / Revenue. Source: IQ_EBIT / IQ_TOTAL_REV.'
+                    : row.label.includes('Effective Tax Rate')
+                    ? 'Effective tax rate = Tax Expense / Earnings Before Tax. Source: IQ_INC_TAX / IQ_EBT_EXCL.'
+                    : row.label.includes('Revenue Growth')
+                    ? 'Year-over-year revenue growth = (Revenue[t] − Revenue[t−1]) / Revenue[t−1]. Source: IQ_TOTAL_REV across fiscal years.'
+                    : row.label.includes('Invested Capital')
+                    ? 'Invested Capital = BV Equity + BV Debt − Cash. Source: IQ_TOTAL_EQUITY + IQ_TOTAL_DEBT − IQ_CASH_EQUIV (current year). Does NOT include R&D capitalization here — that adjustment lives in the DCF engine\'s IC for M3 ROIC.'
+                    : row.label.includes('ROIC')
+                    ? 'ROIC = NOPAT / Prior-year Invested Capital. NOPAT = EBIT × (1 − effective tax). IC(prev) = BV Eq(prev) + BV Debt(prev) − Cash(prev). Effective tax = Tax Expense / EBT for the same year.'
+                    : row.label.includes('Sales / Capital')
+                    ? 'Sales / Capital = Revenue / Invested Capital (current year). Damodaran convention; matches reinvestment formula reinv = ΔRevenue / S/C.'
+                    : row.label.includes('Reinvestment Rate')
+                    ? 'Reinvestment rate = (CapEx − D&A + ΔNCWC) / NOPAT. Source: IQ_CAPEX − IQ_DA_CF + change-in-noncash-WC. NOPAT = EBIT × (1 − effective tax).'
+                    : row.label.includes('Fundamental Growth')
+                    ? 'Fundamental growth = ROIC × Reinvestment Rate. Damodaran identity: the growth rate the firm\'s past capital allocation mathematically supports if policies continue.'
+                    : '';
                 return (
                   <tr key={`calc-${ri}`}>
-                    <SpreadsheetCell value={row.label} type="label" />
-                    <SpreadsheetCell value={pct(ltmCalc)} type="calc" tooltip={calcFormula + ' (LTM)'} />
+                    <SpreadsheetCell value={row.label} type="label" tooltip={calcFormula} />
+                    <SpreadsheetCell
+                      value={
+                        isDollar ? num(ltmCalc)
+                        : isDec ? dec(ltmCalc)
+                        : pct(ltmCalc)
+                      }
+                      type="calc"
+                      tooltip={`${calcFormula} (LTM)`}
+                    />
                     {annualFins.map((f, i) => {
                       const prev = annualFins[i + 1];
                       const v = row.calc!(f, prev);
-                      return <SpreadsheetCell key={`c-${ri}-${i}`} value={pct(v)} type="calc" tooltip={calcFormula} />;
+                      return (
+                        <SpreadsheetCell
+                          key={`c-${ri}-${i}`}
+                          value={
+                            isDollar ? num(v)
+                            : isDec ? dec(v)
+                            : pct(v)
+                          }
+                          type="calc"
+                          tooltip={calcFormula}
+                        />
+                      );
                     })}
                   </tr>
                 );
