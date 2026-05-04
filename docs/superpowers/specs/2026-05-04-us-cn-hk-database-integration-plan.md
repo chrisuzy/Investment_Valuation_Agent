@@ -413,6 +413,50 @@ Refresh must be **purely deterministic Python**. The operator's workflow is:
 
   If adopted later, it's a small addition: one `watchdog.Observer` spawned at backend startup, watching `US_CN_HK_dataset/` and `knowledge_base/` for `*.xls*` file-close events.
 
+## 6d.1. Geographic Segments parser — verified
+
+The `Geographic Segments (Screen by Sum) (Details): Revenue` column packs multiple segments into one cell as `Name: Revenue (Pct%)` entries separated by `;` + `\n`. Written as a deterministic regex parser in `backend/data_sources/us_cn_hk_mapping.py::parse_geographic_segments`. Self-test against 5 real cells (Lenovo 4 segments, AAPL 3, Tencent 2, Moutai 2, BABA 1) all pass; edge cases (empty, `-`, numeric) return empty list.
+
+Example output for Lenovo:
+```
+[
+  {'name': 'Asia Pacific (AP)',               'revenue': 12942.1, 'pct': 0.187},
+  {'name': 'Americas (AG)',                   'revenue': 23297.4, 'pct': 0.337},
+  {'name': 'Europe-Middle East-Africa (EMEA)','revenue': 16936.3, 'pct': 0.245},
+  {'name': 'China',                           'revenue': 15901.2, 'pct': 0.230},
+]
+```
+
+LLM writes the parser once; runtime is pure regex. Operator can run `python -m data_sources.us_cn_hk_mapping` to re-verify after any future CIQ format drift.
+
+## 6d.2. Effective Tax Rate — divide by 100
+
+CIQ screener's `Effective Tax Rate [Latest Annual] (%)` column returns percent as a number (e.g. `1.28`, `15.6`). Our schema stores decimal (`0.0128`, `0.156`). The ingester must call `normalize_effective_tax_rate()` which handles this (plus `-`/`None` → `None`).
+
+Verified against template-path values: Lenovo screener 1.28 → 0.0128 matches Lenovo template's 0.0127 (1bp rounding difference due to fiscal-year vs LTM slicing).
+
+## 6d.3. Compliance — raw screener files NEVER committed
+
+Hard rule baked into `.gitignore`:
+```
+US_CN_HK_dataset/
+markets_dataset/
+ginzu_cc_*.xls
+ginzu_cc_*.xlsx
+backend/data_sources/*.sqlite
+```
+
+The raw exports are the user's data asset; the open-source repo must not carry them. The ingested SQLite is also local-build-only — regenerable from the source files at any time via the admin refresh endpoint.
+
+**Open-source scrubbing (future requirement).** When the DB-backed valuation system is eventually open-sourced:
+- Rename `parse_ciq_header` → `parse_vendor_header` and similar identifiers
+- Strip "Capital IQ" / "CIQ" references from user-facing comments and docs
+- Retain mnemonic strings like `IQ_TOTAL_REV` as opaque vendor field codes (they're public API identifiers, not CIQ trademarks)
+- Rename the `capiq_formula_map.py` module to `vendor_formula_map.py`
+- The `backend/data_sources/us_cn_hk_mapping.py` module already uses neutral names externally (e.g. `parse_ciq_header` is the only internal ref); rename at open-source time.
+
+This scrubbing is out of scope for the current iteration but must precede any public release.
+
 ## 6e. Frontend refresh trigger (new requirement)
 
 An operator-facing **Admin / Data Sources** page. Linked from the sidebar under a "⚙ Admin" item (only shown when env var `AD_CC_ADMIN=1` is set, so it's hidden in normal sessions).
