@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   searchCompanies, downloadTemplate, fetchFromFile,
-  companyExists, valueFromDatabase,
+  companyExists, valueFromDatabase, adminWhoami,
 } from '../api/client';
 import type { SearchResult } from '../api/client';
 import type { ValuationResponse } from '../types/valuation';
@@ -39,6 +39,15 @@ export default function OnboardingWizard({ onComplete, onDemo }: Props) {
   // offer an instant valuation without the template round-trip.
   const [dbStatus, setDbStatus] = useState<{ inDb: boolean; dataAsOf: string | null } | null>(null);
   const [loadingFromDb, setLoadingFromDb] = useState(false);
+
+  // Whether this deployment has admin configured (i.e. the author's own
+  // instance). Determines whether step 2 shows the download button
+  // (author flow) or just the "contact the maintainer" 4-step
+  // instructions (public-clone flow).
+  const [adminConfigured, setAdminConfigured] = useState(false);
+  useEffect(() => {
+    adminWhoami().then(w => setAdminConfigured(w.configured)).catch(() => setAdminConfigured(false));
+  }, []);
 
   useEffect(() => {
     if (!selectedCompany) { setDbStatus(null); return; }
@@ -234,11 +243,14 @@ export default function OnboardingWizard({ onComplete, onDemo }: Props) {
             downloadingTemplate={downloadingTemplate}
             templateDownloaded={templateDownloaded}
             onDownload={triggerDownload}
-            onProceed={proceedToStep3}
+            // Admin path: go to step 3 (fill locally) then step 4 (upload).
+            // Public path: step 3 (fill locally) is meaningless, skip to step 4.
+            onProceed={adminConfigured ? proceedToStep3 : proceedToStep4}
             onBack={() => goBack(1)}
             dbStatus={dbStatus}
             loadingFromDb={loadingFromDb}
             onValueFromDb={triggerValueFromDb}
+            adminConfigured={adminConfigured}
           />
         )}
         {step === 3 && selectedCompany && (
@@ -395,6 +407,7 @@ function StepTwo({
   company, downloadingTemplate, templateDownloaded,
   onDownload, onProceed, onBack,
   dbStatus, loadingFromDb, onValueFromDb,
+  adminConfigured,
 }: {
   company: SearchResult;
   downloadingTemplate: boolean;
@@ -405,26 +418,12 @@ function StepTwo({
   dbStatus: { inDb: boolean; dataAsOf: string | null } | null;
   loadingFromDb: boolean;
   onValueFromDb: () => void;
+  adminConfigured: boolean;
 }) {
   return (
     <div className="p-6 space-y-4">
       <div>
-        <h2 className="text-lg font-bold text-gray-800 mb-1">Step 2 — Get the data template</h2>
-        <p className="text-xs text-gray-500">
-          We'll generate an Excel data-fetch template with <b>{company.exchange_ticker}</b> already
-          entered in cell <code className="bg-gray-100 px-1 rounded text-[11px]">B1</code>.
-          Every fetch formula in the sheet references that cell.
-          {' '}
-          <b>Resolving the formulas requires a financial data provider with an Excel plug-in.</b>
-          {' '}
-          If you have such access, open the downloaded file and the data fills in automatically.
-          {' '}
-          <b>If you don't have access to a data provider</b>, you can instead request a pre-filled
-          version of this template from the repository maintainer
-          {' '}(open a GitHub issue or email the address listed in the repo's
-          {' '}<code className="bg-gray-100 px-1 rounded text-[11px]">README</code>), attaching the ticker
-          above. Once you receive the filled file, skip ahead and upload it in step 4.
-        </p>
+        <h2 className="text-lg font-bold text-gray-800 mb-1">Step 2 — Get the data</h2>
       </div>
 
       {/* Company summary card */}
@@ -449,8 +448,8 @@ function StepTwo({
                 ⚡ Instant — from database
               </div>
               <div className="text-sm text-emerald-900">
-                This company is in the ingested markets dataset. You can skip the template
-                download and upload entirely.
+                This company is in the ingested markets dataset. You can skip the data
+                upload entirely.
               </div>
               {dbStatus.dataAsOf && (
                 <div className="text-[11px] text-emerald-700 mt-1">
@@ -469,64 +468,59 @@ function StepTwo({
         </div>
       )}
 
-      {dbStatus && !dbStatus.inDb && (
-        <div className="text-[11px] text-slate-500 italic">
-          Not found in the pre-ingested markets dataset — use the template path below.
+      {/* Public path — not in DB, no admin. Single-sentence contact
+          instruction. No template download, no data-provider mention. */}
+      {!adminConfigured && dbStatus && !dbStatus.inDb && (
+        <div className="bg-slate-50 border border-slate-300 rounded-lg p-4">
+          <p className="text-sm text-slate-700 leading-relaxed">
+            Email the repository maintainer with the ticker above; they'll send back a data
+            file you can upload in the next step.
+          </p>
         </div>
       )}
 
-      {/* Download action */}
-      <div className="flex flex-col items-center gap-3 py-4">
-        {!templateDownloaded ? (
-          <>
-            <button
-              onClick={onDownload}
-              disabled={downloadingTemplate}
-              className="px-6 py-3 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:bg-gray-300 flex items-center gap-2"
-            >
-              {downloadingTemplate ? (
-                <>Generating template…</>
-              ) : (
-                <>📥 Download pre-filled template</>
-              )}
-            </button>
-            <p className="text-xs text-gray-500">
-              The file will download as{' '}
-              <code className="bg-gray-100 px-1 rounded">
-                CIQ_Fetch_Template_&lt;Company&gt;_{new Date().toISOString().slice(2, 10).replace(/-/g, '')}.xlsx
-              </code>
-              — company name and today&apos;s date are injected by the backend.
-            </p>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-2 text-green-700 text-sm font-semibold">
-              <span>✓</span>
-              <span>Template downloaded — check your Downloads folder.</span>
-            </div>
-            <button
-              onClick={onDownload}
-              className="text-xs text-gray-500 underline hover:text-gray-700"
-            >
-              Download again
-            </button>
-          </>
-        )}
-      </div>
+      {/* Admin / author path — template download flow. Only visible on
+          deployments where AD_CC_ADMIN_TOKEN is set. */}
+      {adminConfigured && (
+        <div className="flex flex-col items-center gap-3 py-4">
+          {!templateDownloaded ? (
+            <>
+              <button
+                onClick={onDownload}
+                disabled={downloadingTemplate}
+                className="px-6 py-3 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:bg-gray-300 flex items-center gap-2"
+              >
+                {downloadingTemplate ? <>Generating template…</> : <>📥 Download pre-filled template</>}
+              </button>
+              <p className="text-[11px] text-gray-500">
+                Admin-only affordance on this deployment.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-green-700 text-sm font-semibold">
+                <span>✓</span>
+                <span>Template downloaded — check your Downloads folder.</span>
+              </div>
+              <button onClick={onDownload} className="text-xs text-gray-500 underline hover:text-gray-700">
+                Download again
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="flex justify-between pt-2 border-t border-gray-100">
-        <button
-          onClick={onBack}
-          className="text-sm text-gray-500 hover:text-gray-700"
-        >
+        <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700">
           ← Change company
         </button>
         <button
           onClick={onProceed}
-          disabled={!templateDownloaded}
+          // Admin path: wait for download. Public path: always enabled.
+          disabled={adminConfigured && !templateDownloaded}
           className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:bg-gray-300"
         >
-          Next: fill it locally →
+          {adminConfigured ? 'Next: fill it locally →' : 'Next: upload data file →'}
         </button>
       </div>
     </div>
