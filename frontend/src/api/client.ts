@@ -213,10 +213,21 @@ export interface DatasetStatus {
   database: {
     path: string;
     exists: boolean;
+    is_seed: boolean;               // true = we're serving the shipped seed
     size_bytes?: number;
     size_human?: string;
     company_count: number;
     error?: string;
+    // Seed (shipped, committed)
+    seed_path?: string;
+    seed_exists?: boolean;
+    seed_size_human?: string;
+    seed_mtime?: string;
+    // Admin DB (private, gitignored)
+    admin_db_path?: string;
+    admin_db_exists?: boolean;
+    admin_db_size_human?: string;
+    admin_db_mtime?: string;
   };
   last_ingest: null | {
     timestamp_utc: string;

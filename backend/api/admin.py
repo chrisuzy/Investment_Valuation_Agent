@@ -122,10 +122,32 @@ def dataset_status(_: None = None, x_admin_token: Annotated[str | None, Header()
     damodaran_files = _manifest(DAMODARAN_DIR, "*.xls*")
     lookup_files = _manifest(INDUSTRY_LOOKUP_DIR, "*.xls*")
 
-    # DB state
-    db_state = {"path": str(db.get_db_path()), "exists": db.get_db_path().exists()}
-    db_state["size_bytes"] = db.get_db_path().stat().st_size if db_state["exists"] else None
+    # DB state — report both the active (admin-built or seed) and the
+    # shipped seed so the operator can tell which one is live and
+    # whether the seed is stale relative to a recent admin refresh.
+    active_path = db.get_db_path()
+    db_state: dict = {
+        "path": str(active_path),
+        "exists": active_path.exists(),
+        "is_seed": active_path == db.SEED_DB_PATH,
+    }
+    db_state["size_bytes"] = active_path.stat().st_size if db_state["exists"] else None
     db_state["size_human"] = _fmt_bytes(db_state["size_bytes"]) if db_state["exists"] else None
+
+    # Seed status — shipped to the public repo
+    db_state["seed_path"] = str(db.SEED_DB_PATH)
+    db_state["seed_exists"] = db.SEED_DB_PATH.exists()
+    if db_state["seed_exists"]:
+        ss = db.SEED_DB_PATH.stat()
+        db_state["seed_size_human"] = _fmt_bytes(ss.st_size)
+        db_state["seed_mtime"] = datetime.fromtimestamp(ss.st_mtime).isoformat(timespec="seconds")
+    # Admin DB status — private to this instance
+    db_state["admin_db_path"] = str(db.DB_PATH)
+    db_state["admin_db_exists"] = db.DB_PATH.exists()
+    if db_state["admin_db_exists"]:
+        adb_stat = db.DB_PATH.stat()
+        db_state["admin_db_size_human"] = _fmt_bytes(adb_stat.st_size)
+        db_state["admin_db_mtime"] = datetime.fromtimestamp(adb_stat.st_mtime).isoformat(timespec="seconds")
 
     last_ingest = None
     if db_state["exists"]:
@@ -260,16 +282,47 @@ def upload_industry_lookup(
 
 @router.post("/refresh-database")
 def refresh_database(x_admin_token: Annotated[str | None, Header()] = None) -> dict:
-    """Rebuild the SQLite from the current ginzu_cc_*.xls files in the
-    markets dataset folder. Drops + recreates tables; idempotent."""
+    """Rebuild the local admin SQLite from current ginzu_cc_*.xls files,
+    then regenerate the scrubbed public seed database.
+
+    Two-step atomic refresh:
+      1. ingest()         → backend/data_sources/us_cn_hk.sqlite (admin DB,
+                            gitignored, includes ingest_log)
+      2. build_seed()     → backend/data/valuation_seed.sqlite   (shipped
+                            seed — dropped ingest_log, neutral metadata)
+
+    After this endpoint returns, the operator's next step is a single
+    git command: `git add backend/data/valuation_seed.sqlite && git
+    commit -m "data: refresh seed" && git push`. The UI shows this hint.
+    """
     require_admin(x_admin_token)
 
     from tools.ingest_us_cn_hk_dataset import ingest
+    from tools.build_seed_database import build_seed
+
     try:
-        report = ingest(MARKETS_DATASET_DIR)
+        ingest_report = ingest(MARKETS_DATASET_DIR)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingest failed: {e}")
-    return report
+
+    # Rebuild the public seed so the shipped database stays in sync.
+    seed_report: dict | None = None
+    seed_error: str | None = None
+    try:
+        seed_report = build_seed()
+    except Exception as e:
+        seed_error = str(e)
+
+    return {
+        "ingest": ingest_report,
+        "seed": seed_report,
+        "seed_error": seed_error,
+        "publish_hint": (
+            "To publish the rebuilt seed to the public repo, run: "
+            "cd <repo> && git add backend/data/valuation_seed.sqlite && "
+            "git commit -m 'data: refresh seed' && git push"
+        ),
+    }
 
 
 @router.post("/refresh-knowledge-base")

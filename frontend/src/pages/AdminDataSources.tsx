@@ -171,30 +171,68 @@ export default function AdminDataSources() {
         busy={busy}
         onDrop={onDrop}
       >
-        <div className="flex items-center gap-4 pt-2 text-xs">
+        <div className="flex items-center gap-4 pt-2 text-xs flex-wrap">
           <div>
-            Database:&nbsp;
+            Active DB:&nbsp;
             {status.database.exists ? (
               <>
                 <span className="font-mono">{status.database.company_count.toLocaleString()}</span> companies,
                 {' '}<span className="font-mono">{status.database.size_human}</span>
+                {status.database.is_seed ? (
+                  <span className="ml-1 text-amber-700 font-semibold">(serving shipped seed)</span>
+                ) : (
+                  <span className="ml-1 text-emerald-700 font-semibold">(admin-built, local)</span>
+                )}
               </>
             ) : <span className="text-slate-500">(not built)</span>}
           </div>
-          {status.last_ingest && (
-            <div className="text-slate-500">
-              Last built: <span className="font-mono">{status.last_ingest.timestamp_utc?.replace('T', ' ').slice(0, 19)}</span> ·
-              {' '}<span className="font-mono">{status.last_ingest.duration_ms}ms</span>
-            </div>
-          )}
           <button
             onClick={() => onRefresh('database')}
             disabled={busy !== null}
             className="ml-auto px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs hover:bg-blue-700 disabled:opacity-40"
           >
-            {busy === 'refresh-database' ? '…' : '↻ Rebuild database'}
+            {busy === 'refresh-database' ? '…' : '↻ Rebuild database + seed'}
           </button>
         </div>
+
+        {/* Dual-DB detail block — admin (private) and seed (published). */}
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] font-mono">
+          <div className="bg-slate-50 border border-slate-200 rounded p-2">
+            <div className="text-[10px] uppercase text-slate-500 mb-1">
+              Admin DB (local, gitignored)
+            </div>
+            {status.database.admin_db_exists ? (
+              <>
+                <div className="truncate" title={status.database.admin_db_path}>{status.database.admin_db_path}</div>
+                <div>{status.database.admin_db_size_human} · mtime {status.database.admin_db_mtime?.replace('T', ' ')}</div>
+              </>
+            ) : <div className="text-slate-500">(not built)</div>}
+          </div>
+          <div className="bg-emerald-50 border border-emerald-200 rounded p-2">
+            <div className="text-[10px] uppercase text-emerald-700 mb-1">
+              Public Seed (committed to repo)
+            </div>
+            {status.database.seed_exists ? (
+              <>
+                <div className="truncate" title={status.database.seed_path}>{status.database.seed_path}</div>
+                <div>{status.database.seed_size_human} · mtime {status.database.seed_mtime?.replace('T', ' ')}</div>
+                <div className="text-emerald-700 mt-1 text-[10px]">
+                  After rebuild, git add / commit / push to publish.
+                </div>
+              </>
+            ) : <div className="text-slate-500">(not yet generated)</div>}
+          </div>
+        </div>
+
+        {status.last_ingest && (
+          <div className="mt-2 text-[11px] text-slate-500 font-mono">
+            Last ingest: {status.last_ingest.timestamp_utc?.replace('T', ' ').slice(0, 19)} ·
+            {' '}{status.last_ingest.duration_ms}ms · {status.last_ingest.n_companies.toLocaleString()} companies
+            {status.last_ingest.unmapped_columns.length > 0 && (
+              <span className="text-amber-700"> · {status.last_ingest.unmapped_columns.length} unmapped cols</span>
+            )}
+          </div>
+        )}
       </DataSourceSection>
 
       {/* === SECTION 2 — Damodaran reference data === */}
