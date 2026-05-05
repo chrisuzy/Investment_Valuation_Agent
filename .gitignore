@@ -62,18 +62,26 @@ markets_dataset/
 ginzu_cc_*.xls
 ginzu_cc_*.xlsx
 
-# Ingested company database file (derived from screener files via
-# the admin refresh endpoint). Built locally; do not commit artifact.
+# Admin-built local database (derived from raw screener files via the
+# admin refresh endpoint). Contains operator's upload manifest in
+# ingest_log — kept local-only. The scrubbed distribution form lives
+# at backend/data/valuation_seed.sqlite (COMMITTED to the repo).
 backend/data_sources/*.sqlite
 backend/data_sources/*.sqlite-journal
 backend/data_sources/*.sqlite-wal
 backend/data_sources/*.sqlite-shm
 
-# Aswath Damodaran's reference workbooks and datasets (downloadable
-# from pages.stern.nyu.edu/~adamodar/ — users download fresh)
-knowledge_base/Ginzu_NVIDIA.xlsx
-knowledge_base/damodaran/
-knowledge_base/industry_lookup/indname.xlsx
+# (backend/data/valuation_seed.sqlite is explicitly NOT gitignored —
+#  it's the public seed that clones load on first run.)
+
+# Aswath Damodaran's reference workbooks and datasets — SHIPPED with
+# the repo so clone-and-run works out of the box. Sourced from
+# pages.stern.nyu.edu/~adamodar/ (publicly available for research use).
+# If you want to use a fresher snapshot, replace these files from the
+# Admin → Data Sources page.
+# knowledge_base/Ginzu_NVIDIA.xlsx       (shipped — reference workbook)
+# knowledge_base/damodaran/              (shipped — industry + macro data)
+# knowledge_base/industry_lookup/        (shipped — ticker→industry map)
 
 # Ginzu-understanding copies of prefilled workbooks
 TEST_DATA/ginzu_prefilled/
