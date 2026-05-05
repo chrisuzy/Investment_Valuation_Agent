@@ -409,12 +409,21 @@ function StepTwo({
   return (
     <div className="p-6 space-y-4">
       <div>
-        <h2 className="text-lg font-bold text-gray-800 mb-1">Step 2 — Download the template</h2>
+        <h2 className="text-lg font-bold text-gray-800 mb-1">Step 2 — Get the data template</h2>
         <p className="text-xs text-gray-500">
           We'll generate an Excel data-fetch template with <b>{company.exchange_ticker}</b> already
           entered in cell <code className="bg-gray-100 px-1 rounded text-[11px]">B1</code>.
-          Every fetch formula in the sheet references that cell — when you open it with your
-          Capital IQ plug-in, the formulas resolve automatically.
+          Every fetch formula in the sheet references that cell.
+          {' '}
+          <b>Resolving the formulas requires a financial data provider with an Excel plug-in.</b>
+          {' '}
+          If you have such access, open the downloaded file and the data fills in automatically.
+          {' '}
+          <b>If you don't have access to a data provider</b>, you can instead request a pre-filled
+          version of this template from the repository maintainer
+          {' '}(open a GitHub issue or email the address listed in the repo's
+          {' '}<code className="bg-gray-100 px-1 rounded text-[11px]">README</code>), attaching the ticker
+          above. Once you receive the filled file, skip ahead and upload it in step 4.
         </p>
       </div>
 
