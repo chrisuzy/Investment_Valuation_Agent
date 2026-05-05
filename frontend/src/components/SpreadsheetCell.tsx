@@ -14,6 +14,13 @@ interface SpreadsheetCellProps {
   align?: 'left' | 'center' | 'right';
   width?: string;
   tooltip?: string;
+  /**
+   * Allow the cell content to wrap across multiple lines instead of
+   * forcing the column wider. Useful for long row labels.
+   */
+  wrap?: boolean;
+  /** Pin this cell to the top of the nearest scrolling ancestor. */
+  sticky?: boolean;
 }
 
 // Soft, low-saturation tints. Each cell type keeps a distinct color family
@@ -59,6 +66,8 @@ export default function SpreadsheetCell({
   align = type === 'label' || type === 'hint' ? 'left' : 'right',
   width,
   tooltip,
+  wrap = false,
+  sticky = false,
 }: SpreadsheetCellProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -74,7 +83,9 @@ export default function SpreadsheetCell({
     if (onChange) onChange(draft);
   }, [draft, onChange]);
 
-  const baseClasses = `border px-1.5 py-0.5 whitespace-nowrap ${TYPE_STYLES[type]} ${ALIGN_MAP[align]} ${bold ? 'font-bold' : ''} ${className}`;
+  const wrapClass = wrap ? 'whitespace-normal leading-tight' : 'whitespace-nowrap';
+  const stickyClass = sticky ? 'sticky top-0 z-20' : '';
+  const baseClasses = `border px-1.5 py-0.5 ${wrapClass} ${stickyClass} ${TYPE_STYLES[type]} ${ALIGN_MAP[align]} ${bold ? 'font-bold' : ''} ${className}`;
 
   if (editing) {
     return (

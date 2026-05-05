@@ -103,8 +103,10 @@ def _db_record_to_company_input(record: dict, risk_free_rate: float, industry_ov
     from engine.data_dictionary import (
         CompanyValuationInput, RawFinancials, MacroInputs, AdjustmentInputs,
         OptionInputs, ValuationAssumptions, MethodologyChoices, TaxHistory,
+        GeographicSegment, SegmentResolution, SegmentMember,
     )
-    from api.routes import _get_damodaran_store, _get_industry_mapper
+    from engine.segment_resolver import resolve_segments
+    from api.routes import _get_damodaran_store, _get_industry_mapper, _clean_rating
 
     co = record["company"]
     annual_rows = record["financials_annual"]
@@ -252,9 +254,12 @@ def _db_record_to_company_input(record: dict, risk_free_rate: float, industry_ov
     # infer from the FY-0 annual row if available.
     if annual_by_offset.get(0) and annual_by_offset[0].get("operating_lease_expense"):
         adj_inputs.operating_lease_expense_current = float(annual_by_offset[0]["operating_lease_expense"])
-    adj_inputs.has_operating_leases = (
-        bool(commitments) or adj_inputs.operating_lease_expense_current > 0
-    )
+    # Match the template path's convention: has_operating_leases is driven by
+    # current-year lease EXPENSE, not merely the presence of commitment rows.
+    # Screener snapshots may include multi-year commitments even when the firm
+    # doesn't break out a separate lease expense — in that case the template
+    # leaves leases disabled (the commitments are discounted elsewhere).
+    adj_inputs.has_operating_leases = adj_inputs.operating_lease_expense_current > 0
 
     # FX defaults: 1.0 if currencies match; None otherwise (user supplies manually)
     fx_rate = co.get("fx_listing_to_reporting")
@@ -278,6 +283,43 @@ def _db_record_to_company_input(record: dict, risk_free_rate: float, industry_ov
         except ValueError:
             quarters_since = 0
 
+    # Build methodology choices. If CIQ-sourced S&P issuer rating is
+    # available, wire it to actual_rating + kd_approach='actual_rating'
+    # so Module 2 uses the actual rating instead of industry fallback.
+    # Geographic segments — run the ingested screener segments through the
+    # same resolver the template path uses so Cost-of-Capital can blend the
+    # country ERPs and show the mapped/unresolved state on the segment UI.
+    raw_geo = co.get("geographic_segments") or []
+    geo_segments_input: list[GeographicSegment] = []
+    for s in resolve_segments(raw_geo, store):
+        r = s["resolution"]
+        geo_segments_input.append(GeographicSegment(
+            name=s["name"],
+            revenue=s["revenue"],
+            pct=s.get("pct"),
+            resolution=SegmentResolution(
+                raw_name=r["raw_name"],
+                mapped_to=r.get("mapped_to"),
+                mapped_kind=r.get("mapped_kind", "unresolved"),
+                erp=r.get("erp"),
+                members=[SegmentMember(**m) for m in (r.get("members") or [])],
+                confidence=r.get("confidence", 0.0),
+                source=r.get("source", "auto"),
+                note=r.get("note"),
+            ),
+        ))
+
+    methodology_kwargs: dict = {"geographic_segments": geo_segments_input}
+    rating_raw = co.get("actual_rating_fc") or co.get("actual_rating_lc")
+    # Normalize CIQ S&P/Moody's labels ("BBB", "A-", "Baa2"…) to the compound
+    # bucket key used by the rating-spread table (e.g. "Baa2/BBB"). Without
+    # this, module_2 falls back to industry spread with a warning.
+    rating = _clean_rating(rating_raw)
+    if rating:
+        methodology_kwargs["actual_rating"] = rating
+        methodology_kwargs["kd_approach"] = "actual_rating"
+    methodology = MethodologyChoices(**methodology_kwargs)
+
     # Assemble
     inputs = CompanyValuationInput(
         ticker=ticker,
@@ -293,13 +335,14 @@ def _db_record_to_company_input(record: dict, risk_free_rate: float, industry_ov
         quarters_since_10k=quarters_since,
         period_date_10k=co.get("period_date_annual"),
         period_date_10q=co.get("period_date_quarterly"),
+        effective_tax_rate_ciq=co.get("effective_tax_rate"),
         adjustment_inputs=adj_inputs,
         macro_inputs=macro,
         industry_data=industry_data,
         industry_data_global=industry_data_global,
         option_inputs=option_inputs,
         valuation_assumptions=ValuationAssumptions(),
-        methodology_choices=MethodologyChoices(),
+        methodology_choices=methodology,
     )
     return inputs
 
@@ -328,4 +371,12 @@ def from_database(req: FromDatabaseRequest) -> dict:
     # Use the same session layout + serializer the template path uses so the
     # response shape is byte-identical.
     session = create_session(inputs, report)
-    return _report_to_dict(session)
+    result = _report_to_dict(session)
+    # Mirror the template-path's root-level context fields (company_name,
+    # country, industry_name). Template path sets these after
+    # _report_to_dict in routes.py::fetch_from_file; we replicate here so
+    # the two paths return identical top-level shapes.
+    result["company_name"] = inputs.company_name
+    result["country"] = inputs.country
+    result["industry_name"] = inputs.industry_data.industry_name if inputs.industry_data else None
+    return result

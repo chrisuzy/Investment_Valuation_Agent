@@ -1,7 +1,7 @@
 {
   "_meta": {
     "description": "Seed mapping from common CIQ geographic-segment labels to Damodaran country or region names. Users can extend this file; edits persist across backend restarts.",
-    "vintage": "2026-04-30",
+    "vintage": "2026-05-05",
     "confidence_scale": "1.0 = exact country match; 0.9 = common alias; 0.7 = broad-region composite with defensible default weights; 0.3 = catch-all with weak signal (Rest of World → Global avg)"
   },
 
@@ -11,15 +11,31 @@
     "u.s.a.": "United States",
     "america": "United States",
     "americas": null,
+    "united states of america": "United States",
+    "the united states of america": "United States",
+    "united states (u.s.)": "United States",
 
     "uk": "United Kingdom",
     "u.k.": "United Kingdom",
     "britain": "United Kingdom",
     "great britain": "United Kingdom",
+    "united kingdom & ireland": "United Kingdom",
+    "united kingdom and ireland": "United Kingdom",
 
     "mainland china": "China",
+    "chinese mainland": "China",
+    "the chinese mainland": "China",
     "prc": "China",
     "people's republic of china": "China",
+    "people's republic of china (\"prc\")": "China",
+    "people's republic of china (prc)": "China",
+    "southern china": "China",
+    "east china": "China",
+    "north china": "China",
+    "northeast china": "China",
+    "northwest china": "China",
+    "southwest china": "China",
+    "south china": "China",
 
     "hong kong": "Hong Kong",
     "hk": "Hong Kong",
@@ -30,6 +46,9 @@
     "north korea": null,
 
     "taiwan, province of china": "Taiwan",
+
+    "the netherlands": "Netherlands",
+    "holland": "Netherlands",
 
     "russian federation": "Russia",
     "viet nam": "Vietnam",
@@ -54,7 +73,102 @@
     "u.a.e.": "United Arab Emirates",
 
     "rsa": "South Africa",
-    "south africa": "South Africa"
+    "south africa": "South Africa",
+
+    "oceania": "Australia",
+    "australia and nz": "Australia",
+    "australia and new zealand": "Australia",
+    "australia & new zealand": "Australia",
+
+    "java": "Indonesia",
+    "outside java": "Indonesia",
+
+    "the philippines": "Philippines",
+
+    "republic of ireland": "Ireland",
+    "northern ireland": "Ireland",
+    "macau": "Macao",
+    "macao": "Macao",
+    "hong kong and others": "Hong Kong",
+    "hong kong, macau and taiwan": "Hong Kong",
+
+    "australia and oceania": "Australia",
+    "australia & oceania": "Australia",
+
+    "northeast china region": "China",
+    "north china region": "China",
+    "south china region": "China",
+    "east china region": "China",
+    "west china region": "China",
+    "central china region": "China",
+    "southwest region": "China",
+    "northwest region": "China",
+    "northeast region": "China",
+    "northwestern region": "China",
+    "southwestern china": "China",
+    "northeastern china": "China",
+    "northwestern china": "China",
+    "north-east region": "China",
+    "north-west region": "China",
+    "central china": "China",
+    "the prc": "China",
+    "prc region": "China",
+    "people’s republic of china": "China",
+    "the people’s republic of china": "China",
+    "north west china": "China",
+    "north east china": "China",
+    "south west china": "China",
+    "north-west china": "China",
+    "north-east china": "China",
+    "south-west china": "China",
+
+    "tokyo": "Japan",
+    "osaka": "Japan",
+    "kansai": "Japan",
+
+    "united states/mexico": "United States",
+    "usa/mexico": "United States",
+
+    "united states (us)": "United States",
+    "us": "United States",
+
+    "jakarta": "Indonesia",
+    "outside jakarta": "Indonesia",
+
+    "central america": "Mexico",
+
+    "united states (u.s)": "United States",
+    "united states (u.s.)": "United States",
+
+    "north-east area": "China",
+    "south-east area": "China",
+
+    "hong kong and macau": "Hong Kong",
+
+    "democratic republic of the congo": "Congo (Democratic Republic of)",
+    "democratic republic of congo": "Congo (Democratic Republic of)",
+    "drc": "Congo (Democratic Republic of)",
+
+    "cayman": "Cayman Islands",
+    "cayman islands": "Cayman Islands",
+    "british virgin island": "Cayman Islands",
+    "british virgin islands": "Cayman Islands",
+
+    "xinjiang": "China",
+    "outside the xinjiang": "China",
+    "xinjiang region": "China",
+    "bohai rim": "China",
+    "bohai sea": "China",
+    "outside mainland china": "China",
+
+    "west china": "China",
+    "west china region": "China",
+    "western china": "China",
+    "turks and caicos island": "Cayman Islands",
+    "turks and caicos islands": "Cayman Islands",
+    "northern china": "China",
+    "northern china region": "China",
+    "southern china region": "China"
   },
 
   "composite_definitions": {
@@ -72,6 +186,8 @@
     "europe-middle east-africa": { "alias_of": "emea" },
     "europe, middle east and africa": { "alias_of": "emea" },
     "europe, middle east & africa": { "alias_of": "emea" },
+    "europe, the middle east and africa": { "alias_of": "emea" },
+    "europe, middle east & africa (emea)": { "alias_of": "emea" },
 
     "americas": {
       "label": "Americas",
@@ -117,6 +233,34 @@
     "apac ex-china": { "alias_of": "asia pacific (ap)" },
     "asia pacific ex-china": { "alias_of": "asia pacific (ap)" },
     "asia-pacific ex-china": { "alias_of": "asia pacific (ap)" },
+    "asia pacific (excluding mainland china)": { "alias_of": "asia pacific (ap)" },
+
+    "asia": {
+      "label": "Asia (generic)",
+      "composition": [
+        {"to": "China",  "kind": "country", "weight": 0.45},
+        {"to": "Japan",  "kind": "country", "weight": 0.15},
+        {"to": "India",  "kind": "country", "weight": 0.15},
+        {"to": "Korea",  "kind": "country", "weight": 0.08},
+        {"to": "Asia",   "kind": "region",  "weight": 0.17}
+      ],
+      "confidence": 0.55,
+      "note": "Generic 'Asia' bucket — GDP-weighted blend. Adjust if company's Asian mix is concentrated in a specific sub-region."
+    },
+    "southeast asia": {
+      "label": "Southeast Asia (ASEAN)",
+      "composition": [
+        {"to": "Singapore",   "kind": "country", "weight": 0.25},
+        {"to": "Indonesia",   "kind": "country", "weight": 0.20},
+        {"to": "Thailand",    "kind": "country", "weight": 0.15},
+        {"to": "Philippines", "kind": "country", "weight": 0.12},
+        {"to": "Vietnam",     "kind": "country", "weight": 0.12},
+        {"to": "Malaysia",    "kind": "country", "weight": 0.16}
+      ],
+      "confidence": 0.80
+    },
+    "se asia": { "alias_of": "southeast asia" },
+    "south-east asia": { "alias_of": "southeast asia" },
 
     "latin america": {
       "label": "Latin America",
@@ -161,6 +305,11 @@
     },
     "us & canada": { "alias_of": "north america" },
     "u.s. & canada": { "alias_of": "north america" },
+    "usa and canada": { "alias_of": "north america" },
+    "united states and canada": { "alias_of": "north america" },
+    "united states of america and canada": { "alias_of": "north america" },
+    "us and canada": { "alias_of": "north america" },
+    "u.s. and canada": { "alias_of": "north america" },
 
     "asean": {
       "label": "ASEAN",
@@ -206,6 +355,198 @@
         {"to": "Austria",     "kind": "country", "weight": 0.07}
       ],
       "confidence": 0.90
+    },
+
+    "asia, latin america & oceania": {
+      "label": "Asia, Latin America & Oceania",
+      "composition": [
+        {"to": "China",                    "kind": "country", "weight": 0.35},
+        {"to": "Japan",                    "kind": "country", "weight": 0.10},
+        {"to": "India",                    "kind": "country", "weight": 0.10},
+        {"to": "Korea",                    "kind": "country", "weight": 0.06},
+        {"to": "Central and South America","kind": "region",  "weight": 0.15},
+        {"to": "Australia & New Zealand",  "kind": "region",  "weight": 0.12},
+        {"to": "Asia",                     "kind": "region",  "weight": 0.12}
+      ],
+      "confidence": 0.50,
+      "note": "Three-continent catch-all common in Korean/Japanese filings."
+    },
+
+    "china, north asia & oceania": {
+      "label": "China, North Asia & Oceania",
+      "composition": [
+        {"to": "China",                   "kind": "country", "weight": 0.60},
+        {"to": "Korea",                   "kind": "country", "weight": 0.15},
+        {"to": "Japan",                   "kind": "country", "weight": 0.15},
+        {"to": "Australia & New Zealand", "kind": "region",  "weight": 0.10}
+      ],
+      "confidence": 0.55
+    },
+
+    "western europe": {
+      "label": "Western Europe",
+      "composition": [
+        {"to": "Western Europe", "kind": "region", "weight": 1.0}
+      ],
+      "confidence": 0.90,
+      "note": "Direct Damodaran regional bucket."
+    },
+    "eastern europe": {
+      "label": "Eastern Europe",
+      "composition": [
+        {"to": "Eastern Europe", "kind": "region", "weight": 1.0}
+      ],
+      "confidence": 0.90
+    },
+    "south america": {
+      "label": "South America",
+      "composition": [
+        {"to": "Central and South America", "kind": "region", "weight": 1.0}
+      ],
+      "confidence": 0.85
+    },
+    "hong kong, macao, taiwan and overseas regions": {
+      "label": "Greater China + Overseas",
+      "composition": [
+        {"to": "China",     "kind": "country", "weight": 0.60},
+        {"to": "Hong Kong", "kind": "country", "weight": 0.20},
+        {"to": "Taiwan",    "kind": "country", "weight": 0.12},
+        {"to": "Global",    "kind": "region",  "weight": 0.08}
+      ],
+      "confidence": 0.60
+    },
+    "europe, middle east, africa": { "alias_of": "emea" },
+    "europe, middle east and africa (emea)": { "alias_of": "emea" },
+
+    "africa": {
+      "label": "Africa",
+      "composition": [
+        {"to": "Africa", "kind": "region", "weight": 1.0}
+      ],
+      "confidence": 0.85
+    },
+
+    "asia excl. japan": {
+      "label": "Asia excluding Japan",
+      "composition": [
+        {"to": "China",       "kind": "country", "weight": 0.50},
+        {"to": "India",       "kind": "country", "weight": 0.18},
+        {"to": "Korea",       "kind": "country", "weight": 0.10},
+        {"to": "Asia",        "kind": "region",  "weight": 0.22}
+      ],
+      "confidence": 0.60
+    },
+    "asia excluding japan": { "alias_of": "asia excl. japan" },
+    "asia ex-japan": { "alias_of": "asia excl. japan" },
+    "asia ex japan": { "alias_of": "asia excl. japan" },
+
+    "central and south america": {
+      "label": "Central and South America",
+      "composition": [
+        {"to": "Central and South America", "kind": "region", "weight": 1.0}
+      ],
+      "confidence": 0.90
+    },
+    "central & south america": { "alias_of": "central and south america" },
+
+    "europe and america": {
+      "label": "Europe & Americas",
+      "composition": [
+        {"to": "Western Europe",  "kind": "region", "weight": 0.55},
+        {"to": "North America",   "kind": "region", "weight": 0.45}
+      ],
+      "confidence": 0.55,
+      "note": "Broad two-continent aggregate — GDP-weighted split assumed."
+    },
+
+    "china (including hong kong)": { "alias_of": "greater china" },
+    "china including hong kong": { "alias_of": "greater china" },
+
+    "middle east africa": { "alias_of": "mena" },
+    "middle east and north africa": { "alias_of": "mena" },
+
+    "rest of north america": {
+      "label": "Rest of North America (ex-US)",
+      "composition": [
+        {"to": "Canada", "kind": "country", "weight": 0.80},
+        {"to": "Mexico", "kind": "country", "weight": 0.20}
+      ],
+      "confidence": 0.70
+    },
+
+    "middle east": {
+      "label": "Middle East",
+      "composition": [
+        {"to": "Middle East", "kind": "region", "weight": 1.0}
+      ],
+      "confidence": 0.90
+    },
+
+    "south east asia": { "alias_of": "southeast asia" },
+    "south-east asia": { "alias_of": "southeast asia" },
+    "asia-pacific excluding china": { "alias_of": "asia pacific (ap)" },
+    "asia pacific excluding china": { "alias_of": "asia pacific (ap)" },
+
+    "nordic countries": { "alias_of": "nordics" },
+    "other nordics": { "alias_of": "nordics" },
+
+    "north central and south america": { "alias_of": "americas" },
+    "north, central and south america": { "alias_of": "americas" },
+
+    "the rest of europe": { "alias_of": "other europe" },
+    "continental europe": { "alias_of": "europe" },
+    "ema": { "alias_of": "emea" },
+    "emeai": {
+      "label": "Europe, Middle East, Africa & India",
+      "composition": [
+        {"to": "Western Europe", "kind": "region", "weight": 0.50},
+        {"to": "Eastern Europe", "kind": "region", "weight": 0.08},
+        {"to": "Middle East",    "kind": "region", "weight": 0.13},
+        {"to": "Africa",         "kind": "region", "weight": 0.17},
+        {"to": "India",          "kind": "country","weight": 0.12}
+      ],
+      "confidence": 0.65
+    },
+    "europe, middle east, india, africa": { "alias_of": "emeai" },
+    "europe, middle east, africa and india": { "alias_of": "emeai" },
+    "europe, middle east, africa and india (emeai)": { "alias_of": "emeai" },
+
+    "asia-australia-pacific": { "alias_of": "asia pacific" },
+    "asia / pacific / others": { "alias_of": "asia pacific" },
+    "asia/pacific/others": { "alias_of": "asia pacific" },
+    "asia-pacific, including australia and new zealand": { "alias_of": "asia pacific" },
+    "asia pacific, including australia and new zealand": { "alias_of": "asia pacific" },
+
+    "usa & latin america": { "alias_of": "americas" },
+    "usa and latin america": { "alias_of": "americas" },
+    "united states of america and south america": { "alias_of": "americas" },
+
+    "new zealand and south east asia": { "alias_of": "asia pacific" },
+
+    "europe and africa": {
+      "label": "Europe & Africa",
+      "composition": [
+        {"to": "Western Europe", "kind": "region", "weight": 0.70},
+        {"to": "Africa",         "kind": "region", "weight": 0.30}
+      ],
+      "confidence": 0.55
+    },
+    "other europe and africa": { "alias_of": "europe and africa" },
+
+    "usa/canada": { "alias_of": "north america" },
+    "usa / canada": { "alias_of": "north america" },
+    "us / canada": { "alias_of": "north america" },
+
+    "asia, middle east & africa": {
+      "label": "Asia, Middle East & Africa",
+      "composition": [
+        {"to": "China",       "kind": "country", "weight": 0.35},
+        {"to": "India",       "kind": "country", "weight": 0.15},
+        {"to": "Middle East", "kind": "region",  "weight": 0.25},
+        {"to": "Africa",      "kind": "region",  "weight": 0.15},
+        {"to": "Asia",        "kind": "region",  "weight": 0.10}
+      ],
+      "confidence": 0.50
     }
   },
 
@@ -224,12 +565,103 @@
       "note": "Defaults to Global average; often means 'everywhere except home country' for this firm."
     },
     "other": {
-      "to": null,
-      "confidence": 0.0,
-      "note": "Action: prompt_user"
+      "to": "Global",
+      "kind": "region",
+      "confidence": 0.25,
+      "note": "Catch-all residual — defaulted to Global average ERP. Consider manually mapping if this bucket is > 10% of revenue."
     },
+    "others": { "alias_of": "other" },
     "other countries": { "alias_of": "other" },
+    "all other countries": { "alias_of": "other" },
+    "other international": { "alias_of": "rest of world" },
+    "other foreign": { "alias_of": "rest of world" },
+    "overseas": { "alias_of": "rest of world" },
+    "abroad": { "alias_of": "rest of world" },
+    "rest of the world": { "alias_of": "rest of world" },
+    "rest-of-world": { "alias_of": "rest of world" },
+    "rest of world (row)": { "alias_of": "rest of world" },
+    "rest of world – ireland": { "alias_of": "rest of world" },
     "worldwide": { "alias_of": "rest of world" },
-    "all other": { "alias_of": "other" }
+    "all other": { "alias_of": "other" },
+    "foreign": { "alias_of": "rest of world" },
+    "international markets": { "alias_of": "international" },
+    "other regions": {
+      "to": "Global",
+      "kind": "region",
+      "confidence": 0.25,
+      "note": "Generic residual region bucket — defaulted to Global average ERP."
+    },
+    "other areas": { "alias_of": "other regions" },
+    "other markets": { "alias_of": "other regions" },
+    "other europe": {
+      "to": "Global",
+      "kind": "region",
+      "confidence": 0.30,
+      "note": "Catch-all European residual — defaulted to Global. Consider using the Europe composite if the company is primarily European."
+    },
+    "export": {
+      "to": "Global",
+      "kind": "region",
+      "confidence": 0.20,
+      "note": "'Export' is a revenue-type label, not a true geography. Mapped to Global average ERP as a fallback."
+    },
+    "unallocated": {
+      "to": "Global",
+      "kind": "region",
+      "confidence": 0.10,
+      "note": "Non-geographic overhead/corporate bucket. No meaningful ERP assignment possible; mapped to Global average as placeholder."
+    },
+    "corporate": { "alias_of": "unallocated" },
+    "eliminations": { "alias_of": "unallocated" },
+    "outside india": { "alias_of": "rest of world" },
+    "outside china": { "alias_of": "rest of world" },
+    "outside the european union": { "alias_of": "rest of world" },
+    "eu excl. sweden": { "alias_of": "europe" },
+    "eu excluding sweden": { "alias_of": "europe" },
+    "other foreign countries": { "alias_of": "rest of world" },
+    "other overseas countries or regions": { "alias_of": "rest of world" },
+    "other asian countries": { "alias_of": "other" },
+    "other locations (mainly mainland china)": { "alias_of": "other" },
+    "export sale": { "alias_of": "export" },
+    "export sales": { "alias_of": "export" },
+    "exports": { "alias_of": "export" },
+    "unallocated duty draw back": { "alias_of": "unallocated" },
+    "duty draw back": { "alias_of": "unallocated" },
+    "rest of europe": { "alias_of": "other europe" },
+    "other south america": {
+      "to": "Global",
+      "kind": "region",
+      "confidence": 0.25,
+      "note": "South American residual — defaulted to Global average."
+    },
+    "other north america": { "alias_of": "rest of world" },
+    "other asia": { "alias_of": "other" },
+    "ex-united states": { "alias_of": "rest of world" },
+    "foreign countries": { "alias_of": "rest of world" },
+    "baltic sea region": { "alias_of": "other" },
+    "rest of asia": { "alias_of": "other" },
+    "overseas region": { "alias_of": "rest of world" },
+    "other european countries": { "alias_of": "other europe" },
+    "other southeast asia region": { "alias_of": "other" },
+    "other locations": { "alias_of": "rest of world" },
+    "other countries/regions": { "alias_of": "rest of world" },
+    "other countries or regions": { "alias_of": "rest of world" },
+    "other countries/territories": { "alias_of": "rest of world" },
+    "other overseas": { "alias_of": "rest of world" },
+    "internationality": { "alias_of": "international" },
+    "other americas": { "alias_of": "americas" },
+    "south america and central": { "alias_of": "americas" },
+    "other european countries and other regions": { "alias_of": "rest of world" },
+    "all other segments": { "alias_of": "unallocated" },
+    "adjustments and eliminations": { "alias_of": "eliminations" },
+    "north sea": { "alias_of": "other europe" },
+    "americas other than united states": { "alias_of": "americas" },
+    "north america excluding usa": { "alias_of": "rest of north america" },
+    "other than india": { "alias_of": "rest of world" },
+    "outside mainland china": { "alias_of": "rest of world" },
+    "other nordic countries": { "alias_of": "nordics" },
+    "europe, middle east, and africa": { "alias_of": "emea" },
+    "europe, africa, middle east": { "alias_of": "emea" },
+    "europe, africa, middle east (eame)": { "alias_of": "emea" }
   }
 }

@@ -234,13 +234,13 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
       <SpreadsheetGrid title={`2. Base Year Financials (${inp.reporting_currency ?? '—'}, in millions)`}>
         <thead>
           <tr>
-            <SpreadsheetCell value="" type="header" width="200px" />
-            <SpreadsheetCell value={inp.period_date_10q ? `LTM (${fmtDate(inp.period_date_10q)})` : 'LTM'} type="header" />
+            <SpreadsheetCell value="" type="header" width="160px" sticky />
+            <SpreadsheetCell value={inp.period_date_10q ? `LTM (${fmtDate(inp.period_date_10q)})` : 'LTM'} type="header" sticky />
             {annualFins.map((f, i) => {
               if (i === 0 && inp.period_date_10k) {
-                return <SpreadsheetCell key={`hdr-fy-${i}`} value={fmtDate(inp.period_date_10k)} type="header" />;
+                return <SpreadsheetCell key={`hdr-fy-${i}`} value={fmtDate(inp.period_date_10k)} type="header" sticky />;
               }
-              return <SpreadsheetCell key={`hdr-fy-${i}`} value={String(f.fiscal_year)} type="header" />;
+              return <SpreadsheetCell key={`hdr-fy-${i}`} value={String(f.fiscal_year)} type="header" sticky />;
             })}
           </tr>
         </thead>
@@ -313,7 +313,7 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
                 },
               },
               {
-                label: '  Reinvestment Rate (CapEx − D&A + ΔWC) / NOPAT',
+                label: '  Reinvestment Rate',
                 type: 'calc',
                 calc: (f, prev) => {
                   if (f.ebit == null || f.earnings_before_tax == null || f.earnings_before_tax <= 0 || f.total_tax_expense == null) return null;
@@ -327,7 +327,7 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
                 },
               },
               {
-                label: '  Fundamental Growth (ROIC × RIR)',
+                label: '  Fundamental Growth',
                 type: 'calc',
                 calc: (f, prev) => {
                   if (f.ebit == null || f.earnings_before_tax == null || f.earnings_before_tax <= 0 || f.total_tax_expense == null) return null;
@@ -408,7 +408,7 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
                     : '';
                 return (
                   <tr key={`calc-${ri}`}>
-                    <SpreadsheetCell value={row.label} type="label" tooltip={calcFormula} />
+                    <SpreadsheetCell value={row.label} type="label" tooltip={calcFormula} width="160px" wrap />
                     <SpreadsheetCell
                       value={
                         isDollar ? num(ltmCalc)
@@ -443,7 +443,7 @@ export default function InputSheet({ data, sessionId, onUpdate }: InputSheetProp
               const ticker = inp.ticker;
               return (
                 <tr key={`d-${key}`}>
-                  <SpreadsheetCell value={row.label} type="label" />
+                  <SpreadsheetCell value={row.label} type="label" width="160px" wrap />
                   <SpreadsheetCell value={num(ltmVal(key))} type={isBalanceSheet ? 'financial' : 'calc'}
                     tooltip={isBalanceSheet
                       ? (qFins[0]?.[key] != null ? `From 10-Q (FQ-0): ${ciqTooltip(key, ticker, 0).replace('IQ_FY-0', 'IQ_FQ-0')}` : `From 10-K (FY-0): ${ciqTooltip(key, ticker, 0)}`)

@@ -44,9 +44,21 @@ DAMODARAN_DIR = REPO_ROOT / "knowledge_base" / "damodaran"
 INDUSTRY_LOOKUP_DIR = REPO_ROOT / "knowledge_base" / "industry_lookup"
 
 # Upload safety rules
-ALLOWED_MARKETS_PATTERN = re.compile(r"^ginzu_cc_\d+_\d+\.xlsx?$", re.IGNORECASE)
+# Accept both the legacy layout (ginzu_cc_<N>_<M>.xls) and the current
+# team layout (<prefix>_<N>.xls, <prefix>_<N> (K).xls). The ingester's
+# _group_files() uses the same shape. Spaces and "(K)" re-download
+# suffixes are allowed so files exported by browsers work as-is.
+ALLOWED_MARKETS_PATTERN = re.compile(
+    r"^[\w.\- ]+_\d+(?:_\d+|\s*\(\d+\))?\.xlsx?$",
+    re.IGNORECASE,
+)
 ALLOWED_INDUSTRY_LOOKUP_NAMES = {"indname.xlsx"}
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
+
+# "...(1).xls" → "....xls"  (browsers add this suffix on re-download)
+_DOWNLOAD_SUFFIX = re.compile(r'\s*\(\d+\)(?=\.[^.]+$)')
+# Characters unsafe in saved filenames (anything outside a permissive set)
+_UNSAFE_FILENAME_CHARS = re.compile(r"[^\w.\- ()']")
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +130,12 @@ def _fmt_bytes(n: int) -> str:
 def dataset_status(_: None = None, x_admin_token: Annotated[str | None, Header()] = None) -> dict:
     require_admin(x_admin_token)
 
-    markets_files = _manifest(MARKETS_DATASET_DIR, "ginzu_cc_*.xls*")
+    # Match the ingester's file-discovery pattern exactly (see
+    # `_group_files` in tools/ingest_us_cn_hk_dataset.py) so the UI shows
+    # every file that will actually feed the rebuild — NOT just legacy
+    # `ginzu_cc_*.xls`. Critical: the ingester unioning files the operator
+    # can't see is exactly how stale+current data get silently mixed.
+    markets_files = _manifest(MARKETS_DATASET_DIR, "*.xls*")
     damodaran_files = _manifest(DAMODARAN_DIR, "*.xls*")
     lookup_files = _manifest(INDUSTRY_LOOKUP_DIR, "*.xls*")
 
@@ -214,11 +231,25 @@ def upload_markets_dataset(
     files for the batch have been uploaded."""
     require_admin(x_admin_token)
 
-    name = Path(file.filename or "").name  # strip any path traversal
+    # Save the uploaded file with its original name (minus any path
+    # traversal). Critically — DO NOT strip a trailing " (K)" suffix for
+    # markets-dataset uploads: the team's current convention treats
+    # "(1)", "(2)", "(3)" as meaningful page numbers inside one batch
+    # (e.g. all_major_exchange_1.xls, all_major_exchange_1 (1).xls,
+    # all_major_exchange_1 (2).xls — all DIFFERENT pages). Stripping the
+    # suffix would collapse four pages onto one filename and silently
+    # overwrite them. The ingester's _group_files() groups by the
+    # leading integer regardless of suffix.
+    name = Path(file.filename or "").name
     if not ALLOWED_MARKETS_PATTERN.match(name):
         raise HTTPException(
             status_code=400,
-            detail=f"Filename must match 'ginzu_cc_<screener>_<part>.xls'; got {name!r}",
+            detail=(
+                "Filename must end with a screener group id — e.g. "
+                "'ginzu_cc_1_1.xls' (legacy) or 'all_major_exchange_1.xls', "
+                "'all_major_exchange_1 (1).xls' (current). "
+                f"Got {name!r}."
+            ),
         )
     target = MARKETS_DATASET_DIR / name
     bytes_written = _atomic_write(target, file)
@@ -230,6 +261,34 @@ def upload_markets_dataset(
     }
 
 
+def _sanitize_filename(raw: str, require_ext: set[str]) -> str:
+    """Clean up a user-supplied filename so it's safe to write and matches
+    the well-known Damodaran / industry-lookup shape.
+
+    Steps (conservative — only transforms the filename, never the bytes):
+      1. Strip any path components (guards against path traversal).
+      2. Remove trailing "(1)", "(2)", etc. that browsers add on re-download.
+      3. Require the extension is one of the expected ones.
+      4. Replace any characters outside [A-Za-z0-9 ._-()'] with '_'.
+
+    Raises HTTPException(400) when the extension isn't accepted.
+    """
+    name = Path(raw or "").name  # strip any /... path parts
+    name = _DOWNLOAD_SUFFIX.sub('', name)
+    # Require a known extension
+    ext = Path(name).suffix.lower().lstrip('.')
+    if ext not in require_ext:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File must have extension {sorted(require_ext)}; got {name!r}",
+        )
+    # Sanitize remaining characters
+    safe = _UNSAFE_FILENAME_CHARS.sub('_', name)
+    if not safe or safe.startswith('.'):
+        raise HTTPException(status_code=400, detail=f"Invalid filename {raw!r}")
+    return safe
+
+
 @router.post("/upload/damodaran")
 def upload_damodaran(
     file: Annotated[UploadFile, File()],
@@ -239,9 +298,7 @@ def upload_damodaran(
     The filename determines which slot it occupies."""
     require_admin(x_admin_token)
 
-    name = Path(file.filename or "").name
-    if not re.match(r"^[\w.-]+\.xlsx?$", name, re.IGNORECASE):
-        raise HTTPException(status_code=400, detail=f"Invalid filename {name!r}")
+    name = _sanitize_filename(file.filename or "", require_ext={"xls", "xlsx"})
     target = DAMODARAN_DIR / name
     bytes_written = _atomic_write(target, file)
     return {
@@ -273,6 +330,83 @@ def upload_industry_lookup(
         "filename": name,
         "size_bytes": bytes_written,
         "next_step": "Call POST /api/admin/refresh-knowledge-base to reload IndustryMapper.",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Clear endpoints — wipe files in a section before uploading a fresh batch
+# ---------------------------------------------------------------------------
+
+_SECTION_DIRS: dict[str, Path] = {
+    "markets-dataset": MARKETS_DATASET_DIR,
+    "damodaran": DAMODARAN_DIR,
+    "industry-lookup": INDUSTRY_LOOKUP_DIR,
+}
+
+
+def _resolve_section_file(section: str, filename: str) -> Path:
+    """Resolve `section` + `filename` to an absolute path inside the intended
+    section folder. Rejects any filename that would escape the folder (path
+    traversal, absolute paths, `..` parts)."""
+    if section not in _SECTION_DIRS:
+        raise HTTPException(status_code=400, detail=f"Unknown section {section!r}")
+    base = _SECTION_DIRS[section].resolve()
+    # Strip any path components the client might have smuggled in.
+    safe_name = Path(filename).name
+    if not safe_name or safe_name in ('.', '..'):
+        raise HTTPException(status_code=400, detail=f"Invalid filename {filename!r}")
+    target = (base / safe_name).resolve()
+    # Ensure the resolved path is still under the section folder.
+    if base not in target.parents and target != base:
+        raise HTTPException(status_code=400, detail="Path traversal rejected")
+    return target
+
+
+@router.post("/clear/{section}")
+def clear_section(section: str, x_admin_token: Annotated[str | None, Header()] = None) -> dict:
+    """Delete every file in the given section folder (markets-dataset,
+    damodaran, or industry-lookup). Call BEFORE uploading a fresh batch so
+    the next refresh doesn't accidentally union new files with stale ones.
+    Does not touch the SQLite DB — a Rebuild is still needed afterwards."""
+    require_admin(x_admin_token)
+    if section not in _SECTION_DIRS:
+        raise HTTPException(status_code=400, detail=f"Unknown section {section!r}")
+    folder = _SECTION_DIRS[section]
+    removed: list[str] = []
+    if folder.exists():
+        for f in sorted(folder.iterdir()):
+            if f.is_file():
+                f.unlink()
+                removed.append(f.name)
+    return {
+        "status": "ok",
+        "section": section,
+        "removed": removed,
+        "count": len(removed),
+        "next_step": f"Drop a fresh batch into the {section} zone, then click Rebuild.",
+    }
+
+
+@router.delete("/file/{section}/{filename:path}")
+def delete_section_file(
+    section: str,
+    filename: str,
+    x_admin_token: Annotated[str | None, Header()] = None,
+) -> dict:
+    """Delete a single file by name from a section folder. Path-traversal
+    safe — only files directly under the section folder can be removed."""
+    require_admin(x_admin_token)
+    target = _resolve_section_file(section, filename)
+    if not target.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {target.name}")
+    if not target.is_file():
+        raise HTTPException(status_code=400, detail=f"Not a regular file: {target.name}")
+    target.unlink()
+    return {
+        "status": "ok",
+        "section": section,
+        "removed": target.name,
+        "next_step": "Click Rebuild to regenerate the database.",
     }
 
 

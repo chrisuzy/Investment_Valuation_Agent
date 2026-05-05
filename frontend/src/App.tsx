@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { useState, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -28,6 +28,7 @@ export default function App() {
   const [data, setData] = useState<ValuationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const { pathname } = useLocation();
 
   const handleCellUpdate = useCallback(async (dotPath: string, value: PatchValue) => {
     if (!sessionId || !data) return;
@@ -71,11 +72,23 @@ export default function App() {
     setSessionId(null);
   }
 
+  // The /admin route is independent of the valuation workflow — it must be
+  // reachable before any file has been uploaded. Without this guard the
+  // sidebar link looks broken (click → nothing happens) because the whole
+  // <main> area is rendering the OnboardingWizard instead of the routed
+  // page tree.
+  const isAdminRoute = pathname.startsWith('/admin');
+
   return (
     <div className="flex min-h-screen bg-gray-100">
       <Sidebar />
       <main className="flex-1 p-6 overflow-auto">
-        {!data ? (
+        {isAdminRoute ? (
+          <Routes>
+            <Route path="/admin" element={<AdminDataSources />} />
+            <Route path="*" element={<Navigate to="/admin" replace />} />
+          </Routes>
+        ) : !data ? (
           <OnboardingWizard onComplete={handleWizardComplete} onDemo={handleLoadDemo} />
         ) : (
           <>

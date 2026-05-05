@@ -14,11 +14,19 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   adminDatasetStatus, adminUploadFile, adminRefreshDatabase, adminRefreshKnowledgeBase,
-  adminWhoami, setAdminToken,
+  adminWhoami, setAdminToken, adminClearSection, adminDeleteFile,
 } from '../api/client';
 import type { DatasetStatus, RefreshReport, FileManifestEntry } from '../api/client';
 
 type UploadKind = 'markets-dataset' | 'damodaran' | 'industry-lookup';
+
+interface PerFileResult {
+  name: string;
+  ok: boolean;
+  savedAs?: string;
+  error?: string;
+  sizeBytes?: number;
+}
 
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n}B`;
@@ -34,6 +42,20 @@ export default function AdminDataSources() {
   const [report, setReport] = useState<{ kind: string; report: RefreshReport } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState('');
+  // Per-upload-zone feedback. Keyed by UploadKind so each section can
+  // display only its own file outcomes.
+  const [uploadResults, setUploadResults] = useState<Record<UploadKind, PerFileResult[]>>({
+    'markets-dataset': [],
+    'damodaran': [],
+    'industry-lookup': [],
+  });
+  // Per-section set of filenames the user has ticked in the file table,
+  // for multi-select delete. Using Set (not array) so toggle is O(1).
+  const [selectedFiles, setSelectedFiles] = useState<Record<UploadKind, Set<string>>>({
+    'markets-dataset': new Set(),
+    'damodaran': new Set(),
+    'industry-lookup': new Set(),
+  });
 
   const refreshStatus = useCallback(async () => {
     setLoading(true);
@@ -64,17 +86,110 @@ export default function AdminDataSources() {
   const onDrop = useCallback(async (kind: UploadKind, files: FileList | null) => {
     if (!files || files.length === 0) return;
     setBusy(`upload-${kind}`);
-    try {
-      for (let i = 0; i < files.length; i++) {
-        await adminUploadFile(kind, files[i]);
+    // Reset this section's results — show a fresh list for this batch.
+    setUploadResults((prev) => ({ ...prev, [kind]: [] }));
+
+    const results: PerFileResult[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      try {
+        const resp = await adminUploadFile(kind, f);
+        results.push({
+          name: f.name, ok: true, savedAs: resp.filename, sizeBytes: resp.size_bytes,
+        });
+      } catch (e) {
+        // Extract the useful detail — axios wraps the backend's 400/413 body.
+        let msg = String(e);
+        if (e && typeof e === 'object' && 'response' in e) {
+          const axErr = e as { response?: { data?: { detail?: string } } };
+          msg = axErr.response?.data?.detail || msg;
+        } else if (e instanceof Error) {
+          msg = e.message;
+        }
+        results.push({ name: f.name, ok: false, error: msg });
       }
+      // Live-update so the user sees progress file-by-file instead of a
+      // single blob at the end.
+      setUploadResults((prev) => ({ ...prev, [kind]: [...results] }));
+    }
+    await refreshStatus();
+    setBusy(null);
+  }, [refreshStatus]);
+
+  const onClearSection = useCallback(async (kind: UploadKind) => {
+    const label = { 'markets-dataset': 'markets dataset',
+                    'damodaran': 'Damodaran reference data',
+                    'industry-lookup': 'industry lookup' }[kind];
+    if (!confirm(`Delete ALL files in "${label}"? This cannot be undone. (The database will stay intact until you click Rebuild.)`)) return;
+    setBusy(`clear-${kind}`);
+    try {
+      const r = await adminClearSection(kind);
+      // Reset per-section upload results too so stale ✓/✗ lines go away
+      setUploadResults((prev) => ({ ...prev, [kind]: [] }));
       await refreshStatus();
+      setReport({ kind: `clear-${kind}`, report: { status: r.status, warnings: [`Removed ${r.count} file(s): ${r.removed.join(', ')}`] } });
     } catch (e) {
-      setReport({ kind: `upload-${kind}-error`, report: { status: 'error', warnings: [String(e)] } });
+      setReport({ kind: `clear-${kind}-error`, report: { status: 'error', warnings: [String(e)] } });
     } finally {
       setBusy(null);
     }
   }, [refreshStatus]);
+
+  const onDeleteFile = useCallback(async (kind: UploadKind, filename: string) => {
+    if (!confirm(`Delete "${filename}"? This cannot be undone.`)) return;
+    setBusy(`delete-${kind}-${filename}`);
+    try {
+      await adminDeleteFile(kind, filename);
+      setSelectedFiles((prev) => {
+        const next = new Set(prev[kind]); next.delete(filename);
+        return { ...prev, [kind]: next };
+      });
+      await refreshStatus();
+    } catch (e) {
+      setReport({ kind: `delete-${kind}-error`, report: { status: 'error', warnings: [String(e)] } });
+    } finally {
+      setBusy(null);
+    }
+  }, [refreshStatus]);
+
+  const toggleFileSelection = useCallback((kind: UploadKind, filename: string) => {
+    setSelectedFiles((prev) => {
+      const next = new Set(prev[kind]);
+      if (next.has(filename)) next.delete(filename);
+      else next.add(filename);
+      return { ...prev, [kind]: next };
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback((kind: UploadKind, allFilenames: string[]) => {
+    setSelectedFiles((prev) => {
+      const current = prev[kind];
+      // If every file is already selected → clear. Else → select all.
+      const allSelected = allFilenames.length > 0 && allFilenames.every((n) => current.has(n));
+      return { ...prev, [kind]: allSelected ? new Set() : new Set(allFilenames) };
+    });
+  }, []);
+
+  const onDeleteSelected = useCallback(async (kind: UploadKind) => {
+    const toDelete = Array.from(selectedFiles[kind]);
+    if (toDelete.length === 0) return;
+    if (!confirm(`Delete ${toDelete.length} selected file${toDelete.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    setBusy(`delete-selected-${kind}`);
+    const failed: string[] = [];
+    for (const f of toDelete) {
+      try {
+        await adminDeleteFile(kind, f);
+      } catch {
+        failed.push(f);
+      }
+    }
+    setSelectedFiles((prev) => ({ ...prev, [kind]: new Set(failed) }));  // keep failed ones ticked
+    if (failed.length > 0) {
+      setReport({ kind: `delete-selected-${kind}-error`, report: { status: 'error', warnings: [`Failed to delete: ${failed.join(', ')}`] } });
+    }
+    await refreshStatus();
+    setBusy(null);
+  }, [selectedFiles, refreshStatus]);
 
   const onRefresh = async (which: 'database' | 'knowledge-base') => {
     setBusy(`refresh-${which}`);
@@ -170,6 +285,13 @@ export default function AdminDataSources() {
         multiple={true}
         busy={busy}
         onDrop={onDrop}
+        onClearSection={onClearSection}
+        onDeleteFile={onDeleteFile}
+        onDeleteSelected={onDeleteSelected}
+        onToggleSelect={toggleFileSelection}
+        onToggleSelectAll={toggleSelectAll}
+        selectedFiles={selectedFiles}
+        results={uploadResults}
       >
         <div className="flex items-center gap-4 pt-2 text-xs flex-wrap">
           <div>
@@ -246,6 +368,13 @@ export default function AdminDataSources() {
         multiple={true}
         busy={busy}
         onDrop={onDrop}
+        onClearSection={onClearSection}
+        onDeleteFile={onDeleteFile}
+        onDeleteSelected={onDeleteSelected}
+        onToggleSelect={toggleFileSelection}
+        onToggleSelectAll={toggleSelectAll}
+        selectedFiles={selectedFiles}
+        results={uploadResults}
       >
         <div className="flex items-center gap-4 pt-2 text-xs">
           <div>{status.knowledge_base_damodaran.files.length} files</div>
@@ -270,6 +399,13 @@ export default function AdminDataSources() {
         multiple={false}
         busy={busy}
         onDrop={onDrop}
+        onClearSection={onClearSection}
+        onDeleteFile={onDeleteFile}
+        onDeleteSelected={onDeleteSelected}
+        onToggleSelect={toggleFileSelection}
+        onToggleSelectAll={toggleSelectAll}
+        selectedFiles={selectedFiles}
+        results={uploadResults}
       />
 
       {/* === Last refresh report === */}
@@ -291,7 +427,9 @@ export default function AdminDataSources() {
 // ---------------------------------------------------------------------------
 
 function DataSourceSection({
-  title, subtitle, files, kind, accept, uploadHelp, multiple, busy, onDrop, children,
+  title, subtitle, files, kind, accept, uploadHelp, multiple, busy,
+  onDrop, onClearSection, onDeleteFile, onDeleteSelected,
+  onToggleSelect, onToggleSelectAll, selectedFiles, results, children,
 }: {
   title: string;
   subtitle: string;
@@ -302,14 +440,50 @@ function DataSourceSection({
   multiple: boolean;
   busy: string | null;
   onDrop: (kind: UploadKind, files: FileList | null) => void;
+  onClearSection: (kind: UploadKind) => void;
+  onDeleteFile: (kind: UploadKind, filename: string) => void;
+  onDeleteSelected: (kind: UploadKind) => void;
+  onToggleSelect: (kind: UploadKind, filename: string) => void;
+  onToggleSelectAll: (kind: UploadKind, allFilenames: string[]) => void;
+  selectedFiles: Record<UploadKind, Set<string>>;
+  results: Record<UploadKind, PerFileResult[]>;
   children?: React.ReactNode;
 }) {
   const [dragOver, setDragOver] = useState(false);
+  const myResults = results[kind];
+  const successCount = myResults.filter(r => r.ok).length;
+  const failCount = myResults.filter(r => !r.ok).length;
+  const selected = selectedFiles[kind];
+  const allFilenames = files.map((f) => f.name);
+  const allSelected = allFilenames.length > 0 && allFilenames.every((n) => selected.has(n));
+  const someSelected = selected.size > 0;
 
   return (
     <section className="bg-white border border-slate-200 rounded-md p-4">
-      <div className="flex items-baseline justify-between mb-1">
+      <div className="flex items-baseline justify-between mb-1 gap-3">
         <h2 className="font-semibold">{title}</h2>
+        {files.length > 0 && (
+          <div className="flex items-center gap-4 text-[11px]">
+            {someSelected && (
+              <button
+                onClick={() => onDeleteSelected(kind)}
+                disabled={busy !== null}
+                className="text-red-700 hover:text-red-800 font-semibold hover:underline disabled:opacity-40"
+                title="Delete the checked files. Database stays intact until you click Rebuild."
+              >
+                {busy === `delete-selected-${kind}` ? 'Deleting…' : `🗑 Delete selected (${selected.size})`}
+              </button>
+            )}
+            <button
+              onClick={() => onClearSection(kind)}
+              disabled={busy !== null}
+              className="text-red-600 hover:text-red-700 hover:underline disabled:opacity-40"
+              title="Delete every file in this section."
+            >
+              {busy === `clear-${kind}` ? 'Deleting…' : `🗑 Delete all ${files.length} file${files.length === 1 ? '' : 's'}`}
+            </button>
+          </div>
+        )}
       </div>
       <div className="text-xs text-slate-500 font-mono mb-3">{subtitle}</div>
 
@@ -338,21 +512,94 @@ function DataSourceSection({
         <div className="text-[11px] text-slate-500 mt-1">{uploadHelp}</div>
       </label>
 
+      {/* Per-file result list for the most recent upload batch. Stays visible
+          after the upload finishes so the operator can see which files were
+          accepted, which were renamed ("foo (1).xls" → "foo.xls"), and which
+          were rejected with the reason inline. */}
+      {myResults.length > 0 && (
+        <div className="mt-3 border border-slate-200 rounded-md overflow-hidden">
+          <div className={`px-2 py-1 text-[11px] font-semibold ${
+            failCount > 0 ? 'bg-amber-50 text-amber-900 border-b border-amber-200' : 'bg-emerald-50 text-emerald-900 border-b border-emerald-200'
+          }`}>
+            {successCount} uploaded
+            {failCount > 0 && <>, <span className="text-red-700">{failCount} rejected</span></>}
+          </div>
+          <ul className="text-xs font-mono divide-y divide-slate-100">
+            {myResults.map((r, i) => (
+              <li key={i} className={`px-2 py-1 flex items-start gap-2 ${r.ok ? '' : 'bg-red-50/60'}`}>
+                <span className={r.ok ? 'text-emerald-600' : 'text-red-600'}>
+                  {r.ok ? '✓' : '✗'}
+                </span>
+                <span className="flex-1 break-all">
+                  <span className={r.ok ? 'text-slate-700' : 'text-red-900'}>{r.name}</span>
+                  {r.ok && r.savedAs && r.savedAs !== r.name && (
+                    <span className="text-slate-500"> → saved as {r.savedAs}</span>
+                  )}
+                  {!r.ok && r.error && (
+                    <div className="text-red-700 text-[11px] mt-0.5 whitespace-pre-wrap">{r.error}</div>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {files.length > 0 && (
         <div className="mt-3 text-xs font-mono border border-slate-200 rounded-md overflow-hidden">
           <table className="w-full">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-500 uppercase">
+                <th className="px-2 py-1 text-left" style={{ width: '2rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                    onChange={() => onToggleSelectAll(kind, allFilenames)}
+                    className="cursor-pointer"
+                    title={allSelected ? 'Clear all' : 'Select all'}
+                  />
+                </th>
+                <th className="px-2 py-1 text-left font-normal">File</th>
+                <th className="px-2 py-1 text-right font-normal" style={{ width: '5rem' }}>Size</th>
+                <th className="px-2 py-1 text-right font-normal" style={{ width: '11rem' }}>Modified</th>
+                <th style={{ width: '2.5rem' }}></th>
+              </tr>
+            </thead>
             <tbody>
-              {files.map((f) => (
-                <tr key={f.name} className="border-b border-slate-100 last:border-0">
-                  <td className="px-2 py-1 text-slate-700">{f.name}</td>
-                  <td className="px-2 py-1 text-right text-slate-500" style={{ width: '5rem' }}>
-                    {fmtBytes(f.size_bytes)}
-                  </td>
-                  <td className="px-2 py-1 text-right text-slate-500" style={{ width: '11rem' }}>
-                    {f.mtime.replace('T', ' ').slice(0, 16)}
-                  </td>
-                </tr>
-              ))}
+              {files.map((f) => {
+                const deleteBusy = busy === `delete-${kind}-${f.name}`;
+                const isSelected = selected.has(f.name);
+                return (
+                  <tr key={f.name} className={`border-b border-slate-100 last:border-0 ${isSelected ? 'bg-amber-50' : ''}`}>
+                    <td className="px-2 py-1">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => onToggleSelect(kind, f.name)}
+                        className="cursor-pointer"
+                      />
+                    </td>
+                    <td className="px-2 py-1 text-slate-700 break-all">{f.name}</td>
+                    <td className="px-2 py-1 text-right text-slate-500">
+                      {fmtBytes(f.size_bytes)}
+                    </td>
+                    <td className="px-2 py-1 text-right text-slate-500">
+                      {f.mtime.replace('T', ' ').slice(0, 16)}
+                    </td>
+                    <td className="px-2 py-1 text-right">
+                      <button
+                        onClick={() => onDeleteFile(kind, f.name)}
+                        disabled={busy !== null}
+                        className="text-red-500 hover:text-red-700 disabled:opacity-30 text-base leading-none"
+                        title={`Delete ${f.name}`}
+                      >
+                        {deleteBusy ? '…' : '🗑'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

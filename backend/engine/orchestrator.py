@@ -70,19 +70,20 @@ def run_full_valuation(
         report.warnings.append("No financial data available")
         return report
 
-    # --- Manual-FX derivation of reporting-ccy market values ---
+    # --- FX derivation of reporting-ccy market values ---
     # Background: CIQ's "Reported Currency" modifier is inert for market data
     # (stock price, market cap, option strike) — those always come through in
     # LISTING currency regardless. Verified against 5 tickers on 2026-05-04.
-    # When the analyst overrides fx_rate manually (fx_rate_source = "manual"),
-    # re-derive the reporting-ccy variants from listing × fx so the valuation
-    # math (WACC uses mv_equity; P/V ratio uses stock_price_reporting) reflects
-    # the user's chosen rate rather than the stale CIQ-fetched values.
+    # Whenever fx_rate is set (manual override, currency-table-default for the
+    # DB path, or "same currency" for single-currency filers), re-derive the
+    # reporting-ccy variants from listing × fx so the valuation math (WACC uses
+    # mv_equity; P/V ratio uses stock_price_reporting) reflects the resolved
+    # rate rather than stale/missing CIQ values.
     #
     # Applied to every row in raw_financials (for the current year, these are
     # the fields that matter; historical years' mv_equity/stock_price are
     # typically None but we cover them for consistency).
-    if inputs.fx_rate is not None and inputs.fx_rate_source == "manual":
+    if inputs.fx_rate is not None:
         fx = inputs.fx_rate
         for fin in financials:
             if fin.stock_price is not None:

@@ -275,6 +275,21 @@ export async function adminRefreshDatabase(): Promise<RefreshReport> {
   return data;
 }
 
+export async function adminClearSection(
+  section: 'markets-dataset' | 'damodaran' | 'industry-lookup',
+): Promise<{ status: string; removed: string[]; count: number; next_step: string }> {
+  const { data } = await api.post(`/admin/clear/${section}`);
+  return data;
+}
+
+export async function adminDeleteFile(
+  section: 'markets-dataset' | 'damodaran' | 'industry-lookup',
+  filename: string,
+): Promise<{ status: string; removed: string; next_step: string }> {
+  const { data } = await api.delete(`/admin/file/${section}/${encodeURIComponent(filename)}`);
+  return data;
+}
+
 export async function adminRefreshKnowledgeBase(): Promise<RefreshReport> {
   const { data } = await api.post('/admin/refresh-knowledge-base');
   return data;

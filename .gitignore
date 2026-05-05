@@ -104,3 +104,7 @@ knowledge_base/groud_truth/
 /test_wb*.xlsx
 /test_workbook*.xlsx
 .superpowers/
+
+# Local-only untracked areas (personal scratch, helper launcher)
+All_major_data/
+start_claude.sh
