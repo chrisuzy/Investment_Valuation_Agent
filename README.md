@@ -125,8 +125,13 @@ Both engines agree: **NVIDIA is overvalued on DCF** (market trades at 1.59–1.6
 
 - **Python 3.12+**
 - **Node.js 18+**
-- **Damodaran's annual reference data** — free, downloadable from [his Stern page](https://pages.stern.nyu.edu/~adamodar/)
-- **A data-fetch template** — you build it once following [`docs/DATA_FETCH_SCHEMA.md`](docs/DATA_FETCH_SCHEMA.md). Capital IQ plug-in, Bloomberg, FactSet, or manual input — anything that produces the documented schema.
+
+That's it. The repo ships with:
+- A **pre-built company database** of ~13,000 public firms across US / China / Hong Kong exchanges (10 years annual + 8 quarters of financials).
+- **Damodaran's annual reference tables** (betas, industry margins, country risk premia, tax rates — all 220+ files).
+- A **ticker → industry lookup** for 800+ names.
+
+Clone, install, run, value. No data prep required.
 
 ### Three commands
 
@@ -144,7 +149,9 @@ cd Investment_Valuation_Agent
 (cd frontend && npm run dev)
 ```
 
-Open `http://localhost:5173/`. Upload a populated data workbook. Get a DCF.
+Open `http://localhost:5173/`. Search a ticker (try `Tencent`, `AAPL`, `SEHK:992` for Lenovo, `SHSE:600519` for Moutai). Click **⚡ Value from Database**. Full DCF in under a second.
+
+**For tickers outside the shipped dataset** (emerging-market single names, rare OTC, new IPOs): download the pre-filled data-fetch template, run it through your own data provider (Capital IQ / Bloomberg / FactSet / manual), drop the filled file back on the upload screen. The [`docs/DATA_FETCH_SCHEMA.md`](docs/DATA_FETCH_SCHEMA.md) spec documents the expected columns.
 
 **→ Full walkthrough:** [**Tutorial — Value Microsoft in 5 minutes**](docs/TUTORIAL.md)
 

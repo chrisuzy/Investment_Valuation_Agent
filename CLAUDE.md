@@ -198,7 +198,18 @@ API: http://localhost:8000/api
 
 ## Markets DB (US + CN + HK company dataset)
 
-**What it is.** ~13k companies across NasdaqGS/NasdaqGM/NasdaqCM/NYSE/SEHK/SHSE/SZSE, ingested from CIQ Screener .xls exports into SQLite at `backend/data_sources/us_cn_hk.sqlite`. Feeds a "Value from Database" fast path that skips template download/fill/upload.
+**What it is.** ~13k companies across NasdaqGS/NasdaqGM/NasdaqCM/NYSE/SEHK/SHSE/SZSE, ingested from CIQ Screener .xls exports into SQLite.
+
+**Two SQLite paths coexist:**
+- `backend/data/valuation_seed.sqlite` — scrubbed redistributable seed. **Committed to the repo** (shipped to every clone). Loaded automatically when no admin-built DB exists.
+- `backend/data_sources/us_cn_hk.sqlite` — admin-built local DB, includes `ingest_log` with upload manifest. **Gitignored.** Wins over the seed when present.
+
+Resolution order in `us_cn_hk_db.py::get_db_path()`: env var override → admin-built → committed seed.
+
+**Seed build pipeline:**
+- Admin uploads .xls files via the `⚙ Data Sources` page → `refresh-database` builds `us_cn_hk.sqlite`.
+- Operator then runs `python -m tools.build_seed_database` to emit `valuation_seed.sqlite`. The scrub drops `ingest_log`, normalizes `fx_rate_source` to vendor-neutral terms, adds a `metadata` table with neutral attribution, and VACUUMs.
+- `git commit` the updated seed to publish a new snapshot to the public repo.
 
 **Two paths coexist:**
 - DB path: `/api/database/search` → `/api/valuation/from-database`. Public endpoints. Instant.
